@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/.test-dist
+
+# generated database client (created by `npm run db:generate` / postinstall)
+/src/generated/prisma
 
 # next.js
 /.next/

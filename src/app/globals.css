@@ -72,7 +72,6 @@ html {
 
 body {
   min-height: 100dvh;
-  overflow-x: hidden;
   background: var(--color-canvas);
   color: var(--color-text);
   font-family: var(--font-sans);

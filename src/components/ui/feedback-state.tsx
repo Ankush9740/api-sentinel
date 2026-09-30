@@ -42,7 +42,7 @@ export function FeedbackState({
         </div>
       ) : null}
       <h2 className="text-sm font-semibold text-text">{title}</h2>
-      <p className="mt-1.5 max-w-md text-sm leading-6 text-text-muted">
+      <p className="mt-1.5 max-w-md break-words text-sm leading-6 text-text-muted [overflow-wrap:anywhere]">
         {description}
       </p>
       {action ? <div className="mt-5">{action}</div> : null}

@@ -44,13 +44,13 @@ export function RequestWorkspace() {
   const activeEmptyState = emptyConfiguration[activeTab];
 
   return (
-    <div className="bg-workspace px-4 pb-7 pt-4 sm:px-7 sm:pt-5 lg:px-8 lg:pb-8">
+    <div className="min-w-0 bg-workspace px-4 pb-7 pt-4 sm:px-7 sm:pt-5 lg:px-8 lg:pb-8">
       <section
         aria-labelledby="request-configuration-title"
-        className="rounded-[22px] border border-border-strong bg-surface-raised p-4 shadow-[0_2px_8px_rgba(75,60,39,0.045)] sm:p-5"
+        className="@container/request min-w-0 rounded-[22px] border border-border-strong bg-surface-raised p-4 shadow-[0_2px_8px_rgba(75,60,39,0.045)] sm:p-5"
       >
-        <div className="flex items-end justify-between gap-4">
-          <div>
+        <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-4">
+          <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-text-subtle">
               Request configuration
             </p>
@@ -67,14 +67,14 @@ export function RequestWorkspace() {
         </div>
 
         <div
-          className="mt-3.5 grid min-w-0 overflow-hidden rounded-xl border border-border-strong bg-surface shadow-[0_1px_2px_rgba(72,58,39,0.04)] transition-colors duration-150 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 sm:grid-cols-[6.25rem_minmax(0,1fr)_6.75rem]"
+          className="mt-3.5 grid min-w-0 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border border-border-strong bg-surface shadow-[0_1px_2px_rgba(72,58,39,0.04)] transition-colors duration-150 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/15 @min-[24rem]/request:grid-cols-[6.25rem_minmax(0,1fr)] @min-[42rem]/request:grid-cols-[6.25rem_minmax(0,1fr)_6.75rem]"
           aria-describedby="request-execution-note"
         >
           <Select
             aria-label="HTTP method"
             defaultValue="GET"
             disabled
-            className="h-11 rounded-none border-0 border-b border-border bg-method-get-muted px-3.5 font-mono text-xs font-bold text-method-get disabled:bg-method-get-muted disabled:text-method-get disabled:opacity-100 sm:border-b-0 sm:border-r"
+            className="h-11 min-w-0 rounded-none border-0 border-b border-border bg-method-get-muted px-3.5 font-mono text-xs font-bold text-method-get disabled:bg-method-get-muted disabled:text-method-get disabled:opacity-100 @min-[24rem]/request:border-b-0 @min-[24rem]/request:border-r"
           >
             <option>GET</option>
           </Select>
@@ -82,11 +82,11 @@ export function RequestWorkspace() {
             aria-label="Request URL"
             placeholder="https://api.example.com/users"
             disabled
-            className="h-11 rounded-none border-0 bg-surface px-4 font-mono text-[13px] shadow-none disabled:bg-surface disabled:opacity-100"
+            className="h-11 min-w-0 rounded-none border-0 bg-surface px-4 font-mono text-[13px] shadow-none disabled:bg-surface disabled:opacity-100"
           />
           <Button
             disabled
-            className="h-11 rounded-none border-0 border-t border-nav-border bg-sidebar text-nav-text disabled:bg-sidebar disabled:text-nav-text disabled:opacity-70 sm:border-l sm:border-t-0"
+            className="h-11 min-w-0 rounded-none border-0 border-t border-nav-border bg-sidebar text-nav-text disabled:bg-sidebar disabled:text-nav-text disabled:opacity-70 @min-[24rem]/request:col-span-2 @min-[42rem]/request:col-span-1 @min-[42rem]/request:border-l @min-[42rem]/request:border-t-0"
           >
             Send
             <ArrowRightIcon className="size-4" />
@@ -95,9 +95,9 @@ export function RequestWorkspace() {
 
         <div
           id="request-execution-note"
-          className="mt-2.5 inline-flex items-center gap-2 rounded-lg border border-warning/25 bg-warning-muted/60 px-2.5 py-1.5 text-xs text-warning-soft"
+          className="mt-2.5 inline-flex max-w-full items-center gap-2 rounded-lg border border-warning/25 bg-warning-muted/60 px-2.5 py-1.5 text-xs text-warning-soft"
         >
-          <span className="size-1.5 rounded-full bg-warning" aria-hidden="true" />
+          <span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
           Request sending is currently unavailable.
         </div>
 
@@ -127,9 +127,9 @@ export function RequestWorkspace() {
 
       <section
         aria-labelledby="response-title"
-        className="mt-3.5 rounded-[22px] border border-border-strong bg-response p-4 shadow-[0_2px_8px_rgba(75,60,39,0.04)] sm:p-5"
+        className="@container/response mt-3.5 min-w-0 rounded-[22px] border border-border-strong bg-response p-4 shadow-[0_2px_8px_rgba(75,60,39,0.04)] sm:p-5"
       >
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-4">
           <h2
             id="response-title"
             className="text-[11px] font-semibold uppercase tracking-[0.15em] text-text-subtle"
@@ -142,7 +142,7 @@ export function RequestWorkspace() {
           </span>
         </div>
 
-        <div className="mt-3.5 grid min-w-0 gap-3.5 xl:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="mt-3.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3.5 @min-[60rem]/response:grid-cols-[minmax(0,1fr)_17rem]">
           <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface-raised">
             <div
               aria-label="Response views"
@@ -165,7 +165,7 @@ export function RequestWorkspace() {
 
           <aside
             aria-label="Execution summary"
-            className="rounded-xl border border-metadata-border bg-metadata p-4"
+            className="min-w-0 rounded-xl border border-metadata-border bg-metadata p-4"
           >
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-metadata-text">
               Execution summary

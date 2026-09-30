@@ -1,5 +1,8 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import {
@@ -7,6 +10,7 @@ import {
   CloseIcon,
   CollectionIcon,
   HistoryIcon,
+  LogOutIcon,
   MenuIcon,
   PlusIcon,
   ProductMarkIcon,
@@ -14,19 +18,54 @@ import {
   UserIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import { trapDialogFocus } from "@/components/ui/dialog";
+import { signOutFromApp } from "@/lib/auth/actions";
+
+interface AuthenticatedUserSummary {
+  name: string | null;
+  email: string | null;
+  image: string | null;
+}
 
 interface AppShellProps {
   children: ReactNode;
+  user: AuthenticatedUserSummary;
 }
 
-const futureNavItems = [
-  { label: "Collections", icon: CollectionIcon },
-  { label: "History", icon: HistoryIcon },
-];
+const navItems = [
+  { label: "Workspace", href: "/workspace", icon: BracketsIcon },
+  { label: "Collections", href: "/collections", icon: CollectionIcon },
+] as const;
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, user }: AppShellProps) {
+  const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mobileDialogRef = useRef<HTMLDialogElement>(null);
+  const drawerTriggerRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLDetailsElement>(null);
+  const accountSummaryRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    // Keep modal state in sync with the xl (80rem) navigation breakpoint.
+    const desktop = window.matchMedia("(min-width: 80rem)");
+    const handleLayoutChange = () => {
+      if (desktop.matches) {
+        if (mobileDialogRef.current?.open) {
+          mobileDialogRef.current.close();
+          accountSummaryRef.current?.focus({ preventScroll: true });
+        }
+        setMobileNavOpen(false);
+      } else if (accountMenuRef.current?.open) {
+        accountMenuRef.current.open = false;
+        accountMenuRef.current.parentElement
+          ?.querySelector<HTMLButtonElement>('[aria-label="Open account and navigation"]')
+          ?.focus({ preventScroll: true });
+      }
+    };
+
+    desktop.addEventListener("change", handleLayoutChange);
+    return () => desktop.removeEventListener("change", handleLayoutChange);
+  }, []);
 
   useEffect(() => {
     const dialog = mobileDialogRef.current;
@@ -43,11 +82,19 @@ export function AppShell({ children }: AppShellProps) {
       };
     }
 
-    if (dialog.open) dialog.close();
+    if (dialog.open) {
+      dialog.close();
+      const trigger = drawerTriggerRef.current;
+      if (trigger?.getClientRects().length) {
+        trigger.focus({ preventScroll: true });
+      } else {
+        accountSummaryRef.current?.focus({ preventScroll: true });
+      }
+    }
   }, [mobileNavOpen]);
 
   return (
-    <div className="min-h-dvh bg-canvas text-text">
+    <div className="min-h-dvh min-w-0 bg-canvas text-text">
       <a
         href="#workspace"
         className="fixed left-3 top-3 z-50 -translate-y-20 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-contrast transition-transform focus:translate-y-0"
@@ -55,94 +102,137 @@ export function AppShell({ children }: AppShellProps) {
         Skip to workspace
       </a>
 
-      <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-nav-border bg-sidebar lg:border-border lg:bg-chrome">
-        <div className="flex h-full items-center">
-          <div className="flex h-full items-center border-r-0 border-nav-border bg-sidebar px-3 lg:w-[188px] lg:border-r lg:px-4">
+      <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-nav-border bg-sidebar xl:border-border xl:bg-chrome">
+        <div className="flex h-full min-w-0 items-center">
+          <div className="flex h-full min-w-0 flex-1 items-center border-r-0 border-nav-border bg-sidebar px-3 sm:flex-none xl:w-[188px] xl:shrink-0 xl:border-r xl:px-4">
             <Button
               variant="ghost"
-              size="sm"
-              onClick={() => setMobileNavOpen(true)}
+              size="icon"
+              onClick={(event) => {
+                drawerTriggerRef.current = event.currentTarget;
+                setMobileNavOpen(true);
+              }}
               aria-label="Open navigation"
               aria-expanded={mobileNavOpen}
-              className="mr-1 px-2 !text-nav-text hover:!bg-nav-raised lg:hidden"
+              aria-controls="application-navigation"
+              className="mr-1 !text-nav-text hover:!bg-nav-raised xl:hidden"
             >
               <MenuIcon className="size-[18px]" />
             </Button>
             <Brand />
           </div>
 
-          <div className="hidden h-full items-center gap-2 px-3 sm:flex lg:px-4">
-            <Button
-              size="sm"
-              disabled
-              className="border-sidebar bg-sidebar text-nav-text hover:border-nav-raised hover:bg-nav-raised disabled:opacity-65"
-              title="New request is currently unavailable"
+          <div className="flex h-full shrink-0 items-center gap-2 px-1 sm:px-3 xl:px-4">
+            <Link
+              href="/workspace"
+              aria-label="New request"
+              className="inline-flex size-8 shrink-0 items-center justify-center gap-2 rounded-lg border border-sidebar bg-sidebar p-0 text-xs font-medium text-nav-text transition-colors hover:border-nav-raised hover:bg-nav-raised sm:h-8 sm:w-auto sm:px-3"
             >
               <PlusIcon className="size-3.5" />
-              New request
-            </Button>
+              <span className="hidden sm:inline">New request</span>
+            </Link>
           </div>
 
-          <div className="ml-auto flex items-center gap-1.5 px-3 sm:gap-2 lg:px-4">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 px-3 sm:gap-2 xl:px-4">
             <div className="hidden md:block">
               <Button
                 variant="ghost"
                 size="sm"
                 disabled
                 aria-label="Search is currently unavailable"
-                className="min-w-40 justify-between border border-border bg-surface/70 px-2.5 text-text-muted disabled:opacity-70"
+                className="justify-between border border-border bg-surface/70 px-2.5 text-text-muted disabled:opacity-70 xl:min-w-40"
               >
                 <span className="inline-flex items-center gap-2">
                   <SearchIcon className="size-3.5" />
                   Search
                 </span>
-                <kbd className="font-mono text-[10px] text-text-subtle">Ctrl K</kbd>
+                <kbd className="hidden font-mono text-[10px] text-text-subtle xl:inline">Ctrl K</kbd>
               </Button>
             </div>
             <Button
               variant="ghost"
-              size="sm"
-              disabled
-              aria-label="Account becomes available after sign-in"
-              title="Account becomes available after sign-in"
-              className="size-8 rounded-full px-0 !text-nav-text hover:!bg-nav-raised disabled:opacity-70 lg:!text-text-secondary lg:hover:!bg-surface-hover"
+              size="icon"
+              onClick={(event) => {
+                drawerTriggerRef.current = event.currentTarget;
+                setMobileNavOpen(true);
+              }}
+              aria-label="Open account and navigation"
+              aria-expanded={mobileNavOpen}
+              aria-controls="application-navigation"
+              className="rounded-full !text-nav-text hover:!bg-nav-raised xl:hidden"
             >
-              <UserIcon className="size-4" />
+              <AccountAvatar user={user} size="sm" />
             </Button>
+            <details
+              ref={accountMenuRef}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && event.currentTarget.open) {
+                  event.preventDefault();
+                  event.currentTarget.open = false;
+                  accountSummaryRef.current?.focus();
+                }
+              }}
+              className="group relative hidden shrink-0 xl:block"
+            >
+              <summary
+                ref={accountSummaryRef}
+                aria-label="Open account menu"
+                className="flex size-8 cursor-pointer list-none items-center justify-center rounded-full text-text-secondary transition-colors hover:bg-surface-hover [&::-webkit-details-marker]:hidden"
+              >
+                <AccountAvatar user={user} size="sm" />
+              </summary>
+              <div className="absolute right-0 top-10 max-h-[calc(100dvh-4.5rem)] w-64 max-w-[calc(100vw-2rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface-raised p-3 shadow-[0_14px_35px_rgba(63,49,33,0.16)]">
+                <AccountIdentity user={user} />
+                <form action={signOutFromApp} className="mt-3 border-t border-border pt-2">
+                  <Button type="submit" variant="ghost" size="sm" className="w-full justify-start">
+                    <LogOutIcon className="size-4" />
+                    Sign out
+                  </Button>
+                </form>
+              </div>
+            </details>
           </div>
         </div>
       </header>
 
-      <aside className="fixed bottom-0 left-0 top-14 z-30 hidden w-[188px] border-r border-nav-border bg-sidebar lg:block">
-        <SidebarContent />
+      <aside className="fixed bottom-0 left-0 top-14 z-30 hidden w-[188px] flex-col border-r border-nav-border bg-sidebar xl:flex">
+        <SidebarContent user={user} pathname={pathname} />
       </aside>
 
       <dialog
+        id="application-navigation"
         ref={mobileDialogRef}
         onCancel={(event) => {
           event.preventDefault();
           setMobileNavOpen(false);
         }}
         onClose={() => setMobileNavOpen(false)}
+        onKeyDown={trapDialogFocus}
         aria-label="Application navigation"
-        className="fixed inset-y-0 left-0 right-auto m-0 h-dvh w-[min(18rem,calc(100vw-3rem))] max-h-none max-w-none overflow-hidden border-0 border-r border-nav-border bg-sidebar p-0 text-nav-text shadow-2xl backdrop:bg-black/60 lg:hidden"
+        className="fixed inset-y-0 left-0 right-auto m-0 h-dvh w-[min(18rem,calc(100vw-3rem))] max-h-dvh max-w-none overflow-hidden border-0 border-r border-nav-border bg-sidebar p-0 text-nav-text shadow-2xl backdrop:bg-black/60 xl:hidden"
       >
-        <div className="flex h-14 items-center justify-between border-b border-nav-border px-4">
-          <Brand />
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMobileNavOpen(false)}
-            aria-label="Close navigation"
-            className="px-2 !text-nav-text hover:!bg-nav-raised"
-          >
-            <CloseIcon className="size-[18px]" />
-          </Button>
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-nav-border px-4">
+            <Brand />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Close navigation"
+              className="!text-nav-text hover:!bg-nav-raised"
+            >
+              <CloseIcon className="size-[18px]" />
+            </Button>
+          </div>
+          <SidebarContent
+            user={user}
+            pathname={pathname}
+            onNavigate={() => setMobileNavOpen(false)}
+          />
         </div>
-        <SidebarContent onNavigate={() => setMobileNavOpen(false)} />
       </dialog>
 
-      <div className="min-w-0 pt-14 lg:pl-[188px]">
+      <div className="min-w-0 pt-14 xl:pl-[188px]">
         <main id="workspace" className="min-w-0 min-h-[calc(100dvh-3.5rem)]">
           {children}
         </main>
@@ -151,41 +241,131 @@ export function AppShell({ children }: AppShellProps) {
   );
 }
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({
+  user,
+  pathname,
+  onNavigate,
+}: {
+  user: AuthenticatedUserSummary;
+  pathname: string;
+  onNavigate?: () => void;
+}) {
   return (
-    <div className="flex h-full flex-col px-2.5 pb-3 pt-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-2.5 pb-3 pt-4">
       <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-nav-subtle">
         Navigate
       </p>
       <nav aria-label="Primary navigation" className="mt-2 space-y-1">
-        <a
-          href="#workspace"
-          aria-current="page"
-          onClick={onNavigate}
-          className="relative flex h-10 items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-[13px] font-medium text-nav-text before:absolute before:-left-2.5 before:h-5 before:w-0.5 before:rounded-r before:bg-nav-accent"
-        >
-          <BracketsIcon className="size-4 text-nav-accent" />
-          Workspace
-        </a>
-
-        {futureNavItems.map((item) => {
+        {navItems.map((item) => {
           const Icon = item.icon;
+          const active =
+            pathname === item.href ||
+            (item.href !== "/workspace" && pathname.startsWith(`${item.href}/`));
           return (
-            <div
+            <Link
               key={item.label}
-              aria-disabled="true"
-              title={`${item.label} is currently unavailable`}
-              className="flex h-10 cursor-not-allowed items-center gap-2.5 rounded-lg px-3 text-[13px] text-nav-subtle"
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              onClick={onNavigate}
+              className={
+                active
+                  ? "relative flex h-10 items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-[13px] font-medium text-nav-text before:absolute before:-left-2.5 before:h-5 before:w-0.5 before:rounded-r before:bg-nav-accent"
+                  : "flex h-10 items-center gap-2.5 rounded-lg border border-transparent px-3 text-[13px] text-nav-muted transition-colors hover:bg-nav-raised hover:text-nav-text"
+              }
             >
-              <Icon className="size-4" />
+              <Icon className={active ? "size-4 text-nav-accent" : "size-4"} />
               <span>{item.label}</span>
-            </div>
+            </Link>
           );
         })}
+        <div
+          aria-disabled="true"
+          title="History is currently unavailable"
+          className="flex h-10 cursor-not-allowed items-center gap-2.5 rounded-lg px-3 text-[13px] text-nav-subtle"
+        >
+          <HistoryIcon className="size-4" />
+          <span>History</span>
+        </div>
       </nav>
 
+      <div className="mt-auto border-t border-nav-border pt-3">
+        <div className="flex min-w-0 items-center gap-2 rounded-xl px-2 py-2">
+          <AccountAvatar user={user} size="md" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-nav-text">{getDisplayName(user)}</p>
+            {user.email ? (
+              <p className="mt-0.5 truncate text-[10px] text-nav-subtle">{user.email}</p>
+            ) : null}
+          </div>
+          <form action={signOutFromApp}>
+            <button
+              type="submit"
+              aria-label="Sign out"
+              title="Sign out"
+              className="grid size-8 shrink-0 place-items-center rounded-lg text-nav-muted transition-colors hover:bg-nav-raised hover:text-nav-text"
+            >
+              <LogOutIcon className="size-4" />
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
+}
+
+function AccountIdentity({ user }: { user: AuthenticatedUserSummary }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <AccountAvatar user={user} size="md" />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-text">{getDisplayName(user)}</p>
+        {user.email ? (
+          <p className="mt-0.5 truncate text-xs text-text-subtle">{user.email}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AccountAvatar({
+  user,
+  size,
+}: {
+  user: AuthenticatedUserSummary;
+  size: "sm" | "md";
+}) {
+  const dimension = size === "sm" ? 28 : 32;
+  const className =
+    size === "sm"
+      ? "size-7 shrink-0 rounded-full border border-border-strong object-cover"
+      : "size-8 shrink-0 rounded-full border border-white/15 object-cover";
+
+  if (user.image) {
+    return (
+      <Image
+        src={user.image}
+        alt=""
+        width={dimension}
+        height={dimension}
+        className={className}
+      />
+    );
+  }
+
+  const initial = getDisplayName(user).charAt(0).toUpperCase();
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`${className} grid place-items-center bg-accent-muted text-[11px] font-semibold text-accent-soft`}
+    >
+      {initial || <UserIcon className="size-4" />}
+    </span>
+  );
+}
+
+function getDisplayName(user: AuthenticatedUserSummary) {
+  return user.name?.trim() || user.email?.split("@")[0] || "Signed-in user";
 }
 
 function Brand() {

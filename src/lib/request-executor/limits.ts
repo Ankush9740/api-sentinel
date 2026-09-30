@@ -1,0 +1,8 @@
+export const REQUEST_TIMEOUT_MS = 10_000;
+export const MAX_REQUEST_BODY_BYTES = 1_048_576;
+export const MAX_RESPONSE_BYTES = 5 * 1_048_576;
+export const MAX_REDIRECTS = 5;
+export const MAX_EXECUTION_PAYLOAD_BYTES = 2_250_000;
+export const EXECUTIONS_PER_MINUTE = 60;
+export const MAX_CONCURRENT_EXECUTIONS = 4;
+
