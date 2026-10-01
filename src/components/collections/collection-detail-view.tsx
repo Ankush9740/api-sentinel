@@ -13,6 +13,7 @@ import {
   TrashIcon,
 } from "@/components/icons";
 import { MethodBadge } from "@/components/collections/method-badge";
+import { NewRequestButton } from "@/components/new-request-button";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FeedbackState } from "@/components/ui/feedback-state";
@@ -117,13 +118,13 @@ export function CollectionDetailView({ collection }: { collection: CollectionDet
               <EditIcon className="size-4" />
               Edit
             </Button>
-            <Link
-              href={`/workspace?collection=${encodeURIComponent(collection.id)}`}
+            <NewRequestButton
+              collectionId={collection.id}
               className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-accent bg-accent px-4 text-sm font-medium text-accent-contrast transition-colors hover:border-accent-strong hover:bg-accent-strong"
             >
               <PlusIcon className="size-4" />
               New endpoint
-            </Link>
+            </NewRequestButton>
           </div>
         </div>
       </header>
@@ -142,13 +143,13 @@ export function CollectionDetailView({ collection }: { collection: CollectionDet
               title="No saved endpoints"
               description="Configure a request and save it here so you can return to it later."
               action={
-                <Link
-                  href={`/workspace?collection=${encodeURIComponent(collection.id)}`}
+                <NewRequestButton
+                  collectionId={collection.id}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-accent bg-accent px-4 text-sm font-medium text-accent-contrast hover:bg-accent-strong"
                 >
                   <PlusIcon className="size-4" />
                   Create endpoint
-                </Link>
+                </NewRequestButton>
               }
             />
           </section>

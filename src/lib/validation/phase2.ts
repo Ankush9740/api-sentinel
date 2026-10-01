@@ -7,6 +7,9 @@ export { isSensitiveHeaderName } from "../security/sensitive-headers";
 
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
+const MAX_HEADER_VALUE_BYTES = 8_192;
+const MAX_JSON_BODY_BYTES = 1_048_576;
+
 const identifierSchema = z.string().trim().min(1).max(191);
 
 const optionalDescriptionSchema = z
@@ -67,8 +70,14 @@ export const requestHeaderInputSchema = requestRowBaseSchema
       .regex(headerNamePattern, "Header names must use valid HTTP token characters."),
     value: z
       .string()
-      .max(8_192, "Header values must be 8,192 characters or fewer.")
-      .refine((value) => !/[\r\n]/.test(value), "Header values cannot contain line breaks."),
+      .refine(
+        (value) => utf8ByteLength(value) <= MAX_HEADER_VALUE_BYTES,
+        "Header values must be 8,192 bytes or fewer.",
+      )
+      .refine(
+        (value) => /^[\t\x20-\x7e]*$/.test(value),
+        "Header values may contain printable ASCII characters and tabs only.",
+      ),
     sensitive: z.boolean().default(false),
     secretOperation: z.enum(["plain", "set", "keep", "clear"]).default("plain"),
   })
@@ -117,6 +126,12 @@ const httpUrlSchema = z
           message: "Request URL must use HTTP or HTTPS.",
         });
       }
+      if (url.username || url.password) {
+        context.addIssue({
+          code: "custom",
+          message: "Credentials are not allowed in request URLs.",
+        });
+      }
     } catch {
       context.addIssue({ code: "custom", message: "Enter a valid absolute request URL." });
     }
@@ -124,7 +139,10 @@ const httpUrlSchema = z
 
 const jsonBodySchema = z
   .string()
-  .max(1_048_576, "JSON body must be 1 MB or smaller.")
+  .refine(
+    (value) => utf8ByteLength(value) <= MAX_JSON_BODY_BYTES,
+    "JSON body must be 1 MB or smaller.",
+  )
   .transform((value) => value.trim() || null)
   .superRefine((value, context) => {
     if (!value) return;
@@ -167,3 +185,7 @@ export const endpointIdSchema = z
 export type CollectionInput = z.input<typeof collectionInputSchema>;
 export type EndpointInput = z.input<typeof endpointInputSchema>;
 export type ValidatedEndpointInput = z.output<typeof endpointInputSchema>;
+
+function utf8ByteLength(value: string) {
+  return new TextEncoder().encode(value).byteLength;
+}

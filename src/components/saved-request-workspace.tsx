@@ -22,6 +22,7 @@ import type { ExecutionApiResult, ExecutionFailure } from "@/lib/request-executo
 import { isSensitiveHeaderName, MASKED_SECRET_VALUE } from "@/lib/security/sensitive-headers";
 import type { HeaderSecretOperation } from "@/lib/security/request-header-secrets";
 import { HTTP_METHODS } from "@/lib/validation/phase2";
+import { createFreshWorkspaceState } from "@/lib/workspace/new-request";
 
 const requestTabs: TabItem[] = [
   { id: "params", label: "Params" },
@@ -62,28 +63,29 @@ export function SavedRequestWorkspace({
   preferredCollectionId = null,
 }: SavedRequestWorkspaceProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState("params");
-  const [method, setMethod] = useState<HttpMethodValue>(endpoint?.method ?? "GET");
-  const [url, setUrl] = useState(endpoint?.url ?? "");
-  const [body, setBody] = useState(endpoint?.body ?? "");
-  const [queryParameters, setQueryParameters] = useState<EditableRow[]>(() => initialRows(endpoint?.queryParameters ?? [], "param"));
-  const [headers, setHeaders] = useState<EditableRow[]>(() => initialRows(endpoint?.headers ?? [], "header"));
+  const [freshWorkspace] = useState(createFreshWorkspaceState);
+  const [activeTab, setActiveTab] = useState(freshWorkspace.activeTab);
+  const [method, setMethod] = useState<HttpMethodValue>(endpoint?.method ?? freshWorkspace.method);
+  const [url, setUrl] = useState(endpoint?.url ?? freshWorkspace.url);
+  const [body, setBody] = useState(endpoint?.body ?? freshWorkspace.body);
+  const [queryParameters, setQueryParameters] = useState<EditableRow[]>(() => initialRows(endpoint?.queryParameters ?? freshWorkspace.queryParameters, "param"));
+  const [headers, setHeaders] = useState<EditableRow[]>(() => initialRows(endpoint?.headers ?? freshWorkspace.headers, "header"));
   const [assertions, setAssertions] = useState<EditableAssertion[]>(() =>
-    initialAssertions(endpoint?.assertions ?? []),
+    initialAssertions(endpoint?.assertions ?? freshWorkspace.assertions),
   );
-  const [endpointName, setEndpointName] = useState(endpoint?.name ?? "Untitled request");
+  const [endpointName, setEndpointName] = useState(endpoint?.name ?? freshWorkspace.endpointName);
   const initialCollectionId = endpoint?.collectionId ??
     (preferredCollectionId && collections.some((item) => item.id === preferredCollectionId)
       ? preferredCollectionId
       : collections[0]?.id ?? "");
   const [collectionId, setCollectionId] = useState(initialCollectionId);
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
-  const [draftName, setDraftName] = useState(endpoint?.name ?? "");
+  const [saveDialogOpen, setSaveDialogOpen] = useState(freshWorkspace.saveDialogOpen);
+  const [draftName, setDraftName] = useState(endpoint?.name ?? freshWorkspace.draftName);
   const [draftCollectionId, setDraftCollectionId] = useState(initialCollectionId);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [responseTab, setResponseTab] = useState("body");
-  const [executionResult, setExecutionResult] = useState<ExecutionApiResult | null>(null);
-  const [isExecuting, setIsExecuting] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(freshWorkspace.feedback);
+  const [responseTab, setResponseTab] = useState(freshWorkspace.responseTab);
+  const [executionResult, setExecutionResult] = useState<ExecutionApiResult | null>(freshWorkspace.executionResult);
+  const [isExecuting, setIsExecuting] = useState(freshWorkspace.isExecuting);
   const [isPending, startTransition] = useTransition();
 
   const currentSnapshot = useMemo(

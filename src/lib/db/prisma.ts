@@ -9,19 +9,26 @@ const globalForPrisma = globalThis as unknown as {
   apiSentinelPrisma?: PrismaClient;
 };
 
+let runtimePrisma: PrismaClient | undefined;
+
 function getPrismaClient() {
+  if (runtimePrisma) {
+    return runtimePrisma;
+  }
+
   if (globalForPrisma.apiSentinelPrisma) {
-    return globalForPrisma.apiSentinelPrisma;
+    runtimePrisma = globalForPrisma.apiSentinelPrisma;
+    return runtimePrisma;
   }
 
   const adapter = new PrismaNeon({ connectionString: getDatabaseUrl() });
-  const client = new PrismaClient({ adapter });
+  runtimePrisma = new PrismaClient({ adapter });
 
   if (process.env.NODE_ENV !== "production") {
-    globalForPrisma.apiSentinelPrisma = client;
+    globalForPrisma.apiSentinelPrisma = runtimePrisma;
   }
 
-  return client;
+  return runtimePrisma;
 }
 
 export const prisma = new Proxy({} as PrismaClient, {

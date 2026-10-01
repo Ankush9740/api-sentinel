@@ -14,6 +14,7 @@ import {
   acquireExecutionSlot,
   resetExecutionLimitsForTests,
 } from "../src/lib/request-executor/rate-limit";
+import { MAX_RESPONSE_BYTES } from "../src/lib/request-executor/limits";
 import type { ExecutionRequestInput } from "../src/lib/request-executor/types";
 import {
   isPublicAddress,
@@ -156,7 +157,22 @@ test("timeout also bounds stalled hostname resolution", async () => {
   if (!result.ok) assert.equal(result.error.code, "TIMEOUT");
 });
 
-test("bounded response reading stops once the configured maximum is exceeded", async () => {
+test("bounded response reading enforces the 4 MiB default and custom limits", async () => {
+  assert.equal(MAX_RESPONSE_BYTES, 4 * 1_048_576);
+
+  const accepted = await collectBoundedBody(
+    Readable.from([Buffer.alloc(MAX_RESPONSE_BYTES)]),
+  );
+  assert.equal(accepted.byteLength, MAX_RESPONSE_BYTES);
+
+  await assert.rejects(
+    collectBoundedBody(
+      Readable.from([Buffer.alloc(MAX_RESPONSE_BYTES), Buffer.alloc(1)]),
+    ),
+    (error: unknown) => error instanceof ResponseTooLargeError &&
+      error.message === "The target response exceeded the 4 MiB execution limit.",
+  );
+
   const stream = Readable.from([Buffer.from("abc"), Buffer.from("def")]);
   await assert.rejects(collectBoundedBody(stream, 5), ResponseTooLargeError);
 });

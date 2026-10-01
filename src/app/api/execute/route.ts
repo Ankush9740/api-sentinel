@@ -20,6 +20,7 @@ import {
   SecretDecryptionError,
 } from "@/lib/security/encryption";
 import { InvalidHeaderSecretOperationError } from "@/lib/security/request-header-secrets";
+import { redactExecutionResultSecrets } from "@/lib/security/response-secrets";
 import { executionRequestSchema } from "@/lib/validation/execution";
 
 export const runtime = "nodejs";
@@ -104,13 +105,16 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const result = await executeRequest({
-      method: parsed.data.method,
-      url: parsed.data.url,
-      queryParameters: parsed.data.queryParameters,
-      headers: resolvedHeaders,
-      body: parsed.data.body,
-    });
+    const result = redactExecutionResultSecrets(
+      await executeRequest({
+        method: parsed.data.method,
+        url: parsed.data.url,
+        queryParameters: parsed.data.queryParameters,
+        headers: resolvedHeaders,
+        body: parsed.data.body,
+      }),
+      resolvedHeaders,
+    );
     if (!result.ok) {
       const history = historyEndpoint
         ? await persistHistorySafely(

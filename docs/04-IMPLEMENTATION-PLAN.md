@@ -565,7 +565,7 @@ Initial JSON body target:
 Initial execution maximum:
 
 ```text
-5 MB
+4 MiB (4,194,304 bytes)
 ```
 
 Do not read unlimited responses into memory.

@@ -52,7 +52,18 @@ test("saved endpoint validation rejects unsafe or out-of-scope input", () => {
 
   assert.equal(endpointInputSchema.safeParse({ ...base, method: "TRACE" }).success, false);
   assert.equal(endpointInputSchema.safeParse({ ...base, url: "file:///etc/passwd" }).success, false);
+  assert.equal(
+    endpointInputSchema.safeParse({ ...base, url: "https://user:password@api.example.com" }).success,
+    false,
+  );
   assert.equal(endpointInputSchema.safeParse({ ...base, body: "{" }).success, false);
+  assert.equal(
+    endpointInputSchema.safeParse({
+      ...base,
+      body: JSON.stringify({ value: "🙂".repeat(300_000) }),
+    }).success,
+    false,
+  );
   assert.equal(
     endpointInputSchema.safeParse({
       ...base,
@@ -60,6 +71,15 @@ test("saved endpoint validation rejects unsafe or out-of-scope input", () => {
     }).success,
     false,
   );
+  for (const value of ["one\0two", "emoji-🙂"]) {
+    assert.equal(
+      endpointInputSchema.safeParse({
+        ...base,
+        headers: [{ key: "X-Test", value, enabled: true, sensitive: false }],
+      }).success,
+      false,
+    );
+  }
   assert.equal(
     endpointInputSchema.safeParse({
       ...base,

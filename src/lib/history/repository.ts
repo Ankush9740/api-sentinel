@@ -53,6 +53,15 @@ export async function persistSavedRequestRun(
   );
 
   return prisma.$transaction(async (transaction) => {
+    // Retention is scoped per user. Serialize that user's writers so concurrent
+    // executions cannot each observe the pre-commit count and exceed either cap.
+    await transaction.$queryRaw<Array<{ acquired: boolean }>>`
+      WITH retention_lock AS (
+        SELECT pg_advisory_xact_lock(hashtextextended(${authenticatedUserId}, 0))
+      )
+      SELECT TRUE AS acquired FROM retention_lock
+    `;
+
     const run = await transaction.requestRun.create({
       data,
       select: { id: true },

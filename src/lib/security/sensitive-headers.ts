@@ -11,14 +11,19 @@ const exactSensitiveHeaderNames = new Set([
 ]);
 
 const sensitiveHeaderSuffixPattern =
-  /(?:^|[-_])(?:password|passwd|secret|token|api[-_]?key|private[-_]?key)$/i;
+  /(?:^|[-_])(?:password|passwd|secret|token|private[-_]?key)$/i;
+const apiKeySuffixPattern = /api[-_]?key$/i;
+const subscriptionKeySuffixPattern = /subscription[-_]?key$/i;
 
 export const MASKED_SECRET_VALUE = "••••••••";
 export const REDACTED_SECRET_VALUE = "[REDACTED]";
 
 export function isSensitiveHeaderName(name: string) {
   const normalized = name.trim().toLowerCase();
-  return exactSensitiveHeaderNames.has(normalized) || sensitiveHeaderSuffixPattern.test(normalized);
+  return exactSensitiveHeaderNames.has(normalized) ||
+    sensitiveHeaderSuffixPattern.test(normalized) ||
+    apiKeySuffixPattern.test(normalized) ||
+    subscriptionKeySuffixPattern.test(normalized);
 }
 
 export function redactSensitiveHeaders<T extends { key: string; value: string; sensitive?: boolean }>(

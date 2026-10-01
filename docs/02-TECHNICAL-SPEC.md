@@ -783,7 +783,7 @@ Target API did not respond within 10 seconds.
 Initial V1 maximum:
 
 ```text
-5 MB
+4 MiB (4,194,304 bytes)
 ```
 
 The response should be read in a bounded manner where feasible.
@@ -903,7 +903,7 @@ For V1:
 Example strategy:
 
 ```text
-Execution maximum: 5 MB
+Execution maximum: 4 MiB (4,194,304 bytes)
 
 Persisted body maximum:
 256 KB

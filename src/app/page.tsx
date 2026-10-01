@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
 
-import { GitHubIcon, ProductMarkIcon } from "@/components/icons";
-import { signInWithGitHub } from "@/lib/auth/actions";
+import { GitHubIcon, GoogleIcon, ProductMarkIcon } from "@/components/icons";
+import { signInWithGitHub, signInWithGoogle } from "@/lib/auth/actions";
 import { getAuthenticatedUser } from "@/lib/auth/server";
-import { getAuthEnvironmentStatus } from "@/lib/env/server";
+import {
+  getAuthEnvironmentStatus,
+  getGoogleAuthEnvironmentStatus,
+} from "@/lib/env/server";
 
 interface SignInPageProps {
   searchParams: Promise<{
@@ -13,6 +16,8 @@ interface SignInPageProps {
 
 const notices: Record<string, string> = {
   configuration: "Authentication is not configured in this environment yet.",
+  "google-configuration":
+    "Google sign-in is not configured in this environment yet. You can still continue with GitHub.",
   "signin-required": "Sign in to continue to the protected workspace.",
 };
 
@@ -22,6 +27,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   const requestedNotice =
     noticeKey && Object.hasOwn(notices, noticeKey) ? notices[noticeKey] : undefined;
   const environment = getAuthEnvironmentStatus();
+  const googleEnvironment = getGoogleAuthEnvironmentStatus();
   let authenticationUnavailable = false;
   let authenticatedUser: Awaited<ReturnType<typeof getAuthenticatedUser>> = null;
 
@@ -87,7 +93,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             Sign in to your workspace
           </h2>
           <p className="mt-3 text-sm leading-6 text-text-muted">
-            Continue with GitHub to establish your secure, database-backed API Sentinel identity.
+            Continue with GitHub or Google to establish your secure, database-backed API Sentinel identity.
           </p>
 
           {notice ? (
@@ -99,20 +105,39 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
             </div>
           ) : null}
 
-          <form action={signInWithGitHub} className="mt-7">
-            <button
-              type="submit"
-              disabled={isUnavailable}
-              className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-sidebar bg-sidebar px-4 text-sm font-semibold text-nav-text transition-colors hover:border-nav-raised hover:bg-nav-raised disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <GitHubIcon className="size-[18px]" />
-              Continue with GitHub
-            </button>
-          </form>
+          <div className="mt-7 grid gap-3">
+            <form action={signInWithGitHub}>
+              <button
+                type="submit"
+                disabled={isUnavailable}
+                className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-sidebar bg-sidebar px-4 text-sm font-semibold text-nav-text transition-colors hover:border-nav-raised hover:bg-nav-raised disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <GitHubIcon className="size-[18px]" />
+                Continue with GitHub
+              </button>
+            </form>
+
+            <form action={signInWithGoogle}>
+              <button
+                type="submit"
+                disabled={isUnavailable}
+                aria-describedby={!googleEnvironment.isConfigured ? "google-setup-note" : undefined}
+                className="inline-flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border-strong bg-surface px-4 text-sm font-semibold text-text transition-colors hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <GoogleIcon className="size-[18px]" />
+                Continue with Google
+              </button>
+            </form>
+          </div>
 
           <p className="mt-4 text-center text-xs leading-5 text-text-subtle">
-            GitHub is used only to authenticate your API Sentinel account.
+            OAuth providers are used only to authenticate your API Sentinel account.
           </p>
+          {!googleEnvironment.isConfigured && !isUnavailable ? (
+            <p id="google-setup-note" className="mt-2 text-center text-xs leading-5 text-text-subtle">
+              Google sign-in needs local provider credentials before it can continue.
+            </p>
+          ) : null}
         </div>
       </section>
     </main>

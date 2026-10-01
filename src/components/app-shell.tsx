@@ -14,9 +14,9 @@ import {
   MenuIcon,
   PlusIcon,
   ProductMarkIcon,
-  SearchIcon,
   UserIcon,
 } from "@/components/icons";
+import { NewRequestButton } from "@/components/new-request-button";
 import { Button } from "@/components/ui/button";
 import { trapDialogFocus } from "@/components/ui/dialog";
 import { signOutFromApp } from "@/lib/auth/actions";
@@ -124,32 +124,16 @@ export function AppShell({ children, user }: AppShellProps) {
           </div>
 
           <div className="flex h-full shrink-0 items-center gap-2 px-1 sm:px-3 xl:px-4">
-            <Link
-              href="/workspace"
+            <NewRequestButton
               aria-label="New request"
               className="inline-flex size-8 shrink-0 items-center justify-center gap-2 rounded-lg border border-sidebar bg-sidebar p-0 text-xs font-medium text-nav-text transition-colors hover:border-nav-raised hover:bg-nav-raised sm:h-8 sm:w-auto sm:px-3"
             >
               <PlusIcon className="size-3.5" />
               <span className="hidden sm:inline">New request</span>
-            </Link>
+            </NewRequestButton>
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 px-3 sm:gap-2 xl:px-4">
-            <div className="hidden md:block">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled
-                aria-label="Search is currently unavailable"
-                className="justify-between border border-border bg-surface/70 px-2.5 text-text-muted disabled:opacity-70 xl:min-w-40"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <SearchIcon className="size-3.5" />
-                  Search
-                </span>
-                <kbd className="hidden font-mono text-[10px] text-text-subtle xl:inline">Ctrl K</kbd>
-              </Button>
-            </div>
             <Button
               variant="ghost"
               size="icon"

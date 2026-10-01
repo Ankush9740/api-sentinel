@@ -9,7 +9,7 @@ interface AuthErrorPageProps {
 }
 
 const errorMessages: Record<string, string> = {
-  AccessDenied: "GitHub sign-in was cancelled or access was denied.",
+  AccessDenied: "OAuth sign-in was cancelled or access was denied.",
   OAuthAccountNotLinked:
     "This email is already associated with a different sign-in method.",
   SessionUnavailable:
@@ -43,7 +43,7 @@ export default async function AuthErrorPage({ searchParams }: AuthErrorPageProps
           We couldn&apos;t complete that request.
         </h1>
         <p className="mt-3 text-sm leading-6 text-text-muted">
-          {message ?? "GitHub authentication could not be completed. Please return and try again."}
+          {message ?? "Authentication could not be completed. Please return and try again."}
         </p>
         <Link
           href="/"

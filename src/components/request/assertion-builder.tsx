@@ -10,8 +10,9 @@ import {
   type AssertionOperatorValue,
   type AssertionTypeValue,
 } from "@/lib/assertions/types";
-import { MAX_ASSERTIONS_PER_REQUEST } from "@/lib/validation/assertions";
 import { parseJsonPathSegments } from "@/lib/assertions/json-path";
+import { isSensitiveHeaderName } from "@/lib/security/sensitive-headers";
+import { MAX_ASSERTIONS_PER_REQUEST } from "@/lib/validation/assertions";
 
 export interface EditableAssertion {
   clientId: string;
@@ -100,7 +101,7 @@ export function AssertionBuilder({ assertions, setAssertions }: AssertionBuilder
                 className="min-w-0 rounded-xl border border-border bg-surface p-2.5 sm:p-3"
               >
                 <legend className="sr-only">Assertion {index + 1}</legend>
-                <div className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_2rem] gap-2 sm:grid-cols-[1.75rem_minmax(8.5rem,0.9fr)_minmax(8.5rem,0.9fr)_minmax(10rem,1.1fr)_minmax(9rem,1fr)_2rem]">
+                <div className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_2rem] gap-2 @min-[52rem]/request:grid-cols-[1.75rem_minmax(8.5rem,0.9fr)_minmax(8.5rem,0.9fr)_minmax(10rem,1.1fr)_minmax(9rem,1fr)_2rem]">
                   <label className="col-start-1 row-start-1 flex items-center justify-center self-center">
                     <span className="sr-only">Enable assertion {index + 1}</span>
                     <input
@@ -122,7 +123,7 @@ export function AssertionBuilder({ assertions, setAssertions }: AssertionBuilder
                     aria-label={`Assertion ${index + 1} operator`}
                     value={assertion.operator}
                     onChange={(event) => changeOperator(assertion, event.target.value as AssertionOperatorValue)}
-                    className="col-span-3 row-start-2 h-9 min-w-0 text-xs sm:col-span-1 sm:col-start-3 sm:row-start-1"
+                    className="col-span-3 row-start-2 h-9 min-w-0 text-xs @min-[52rem]/request:col-span-1 @min-[52rem]/request:col-start-3 @min-[52rem]/request:row-start-1"
                   >
                     {ASSERTION_OPERATORS_BY_TYPE[assertion.type].map((operator) => (
                       <option key={operator} value={operator}>{operatorLabels[operator]}</option>
@@ -134,11 +135,11 @@ export function AssertionBuilder({ assertions, setAssertions }: AssertionBuilder
                       value={assertion.target}
                       onChange={(event) => updateAssertion(assertion.clientId, { target: event.target.value })}
                       placeholder={assertion.type === "HEADER" ? "content-type" : "data.users.0.id"}
-                      className="col-span-3 row-start-3 h-9 font-mono text-xs sm:col-span-1 sm:col-start-4 sm:row-start-1"
+                      className="col-span-3 row-start-3 h-9 font-mono text-xs @min-[52rem]/request:col-span-1 @min-[52rem]/request:col-start-4 @min-[52rem]/request:row-start-1"
                       maxLength={256}
                     />
                   ) : (
-                    <div className="col-span-3 row-start-3 hidden h-9 items-center rounded-lg border border-dashed border-border px-3 text-xs text-text-subtle sm:col-span-1 sm:col-start-4 sm:row-start-1 sm:flex">
+                    <div className="col-span-3 row-start-3 hidden h-9 items-center rounded-lg border border-dashed border-border px-3 text-xs text-text-subtle @min-[52rem]/request:col-span-1 @min-[52rem]/request:col-start-4 @min-[52rem]/request:row-start-1 @min-[52rem]/request:flex">
                       Response value
                     </div>
                   )}
@@ -148,12 +149,12 @@ export function AssertionBuilder({ assertions, setAssertions }: AssertionBuilder
                       value={assertion.expectedValue}
                       onChange={(event) => updateAssertion(assertion.clientId, { expectedValue: event.target.value })}
                       placeholder={expectedPlaceholder(assertion)}
-                      className="col-span-3 row-start-4 h-9 font-mono text-xs sm:col-span-1 sm:col-start-5 sm:row-start-1"
+                      className="col-span-3 row-start-4 h-9 font-mono text-xs @min-[52rem]/request:col-span-1 @min-[52rem]/request:col-start-5 @min-[52rem]/request:row-start-1"
                       maxLength={1_024}
                       inputMode={assertion.type === "STATUS_CODE" || assertion.type === "RESPONSE_TIME" ? "numeric" : undefined}
                     />
                   ) : (
-                    <div className="col-span-3 row-start-4 hidden h-9 items-center rounded-lg border border-dashed border-border px-3 text-xs text-text-subtle sm:col-span-1 sm:col-start-5 sm:row-start-1 sm:flex">
+                    <div className="col-span-3 row-start-4 hidden h-9 items-center rounded-lg border border-dashed border-border px-3 text-xs text-text-subtle @min-[52rem]/request:col-span-1 @min-[52rem]/request:col-start-5 @min-[52rem]/request:row-start-1 @min-[52rem]/request:flex">
                       No expected value
                     </div>
                   )}
@@ -162,7 +163,7 @@ export function AssertionBuilder({ assertions, setAssertions }: AssertionBuilder
                     size="icon"
                     onClick={() => setAssertions(assertions.filter((item) => item.clientId !== assertion.clientId))}
                     aria-label={`Remove assertion ${index + 1}`}
-                    className="col-start-3 row-start-1 size-8 text-text-subtle hover:text-danger-soft sm:col-start-6"
+                    className="col-start-3 row-start-1 size-8 text-text-subtle hover:text-danger-soft @min-[52rem]/request:col-start-6"
                   >
                     <CloseIcon className="size-4" />
                   </Button>
@@ -221,7 +222,7 @@ function getAssertionDraftError(assertion: EditableAssertion) {
   }
   if (assertion.type === "HEADER") {
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(assertion.target.trim())) return "Enter a valid response header name.";
-    if (/^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|x-auth-token)$/i.test(assertion.target.trim())) {
+    if (isSensitiveHeaderName(assertion.target)) {
       return "Sensitive header values cannot be used in assertions.";
     }
   }

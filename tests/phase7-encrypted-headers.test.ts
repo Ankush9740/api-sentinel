@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { evaluateAssertions } from "../src/lib/assertions/evaluator";
+import { buildSavedRunSnapshot } from "../src/lib/history/snapshots";
 import {
   decryptSecretWithKey,
   EncryptionConfigurationError,
@@ -20,6 +22,7 @@ import {
   type HeaderDraft,
   type StoredHeaderRecord,
 } from "../src/lib/security/request-header-secrets";
+import { redactExecutionResultSecrets } from "../src/lib/security/response-secrets";
 import {
   isSensitiveHeaderName,
   redactSensitiveHeaders,
@@ -77,6 +80,9 @@ test("the canonical classifier and redactor cover credential-bearing header fami
     "Set-Cookie",
     "X-API-Key",
     "X-Service-Api-Key",
+    "X-RapidAPI-Key",
+    "Ocp-Apim-Subscription-Key",
+    "X-Subscription-Key",
     "X-Access-Token",
     "X-CSRF-Token",
     "X-Private-Key",
@@ -211,6 +217,284 @@ test("saved secrets reach only the server-side outbound request and are stripped
   const result = await executeRequest(request, { resolver, transport });
   assert.equal(result.ok, true);
   assert.deepEqual(observedAuthorization, ["outbound-only", undefined]);
+});
+
+test("target-echoed secrets are removed before browser results, assertions, and history", () => {
+  const secret = "Bearer phase-7-reflected-secret";
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 25,
+      sizeBytes: 180,
+      headers: [
+        { key: "content-type", value: "application/json" },
+        { key: "x-reflected-credential", value: secret },
+      ],
+      body: JSON.stringify({
+        headers: { authorization: secret },
+        message: `received ${secret}`,
+        [secret]: "reflected in a JSON property name",
+      }),
+      bodyKind: "json",
+      contentType: "application/json",
+      finalUrl: `https://echo.example/final/${secret}`,
+      redirectCount: 0,
+    },
+  }, [{
+    key: "Authorization",
+    value: secret,
+    enabled: true,
+    sensitive: true,
+  }]);
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(JSON.stringify(result).includes(secret), false);
+  assert.equal(result.response.headers[1].value, REDACTED_SECRET_VALUE);
+  assert.equal(
+    (JSON.parse(result.response.body) as { headers: { authorization: string } }).headers.authorization,
+    REDACTED_SECRET_VALUE,
+  );
+
+  const assertions = evaluateAssertions(result.response, [{
+    type: "JSON_PATH",
+    operator: "EQUALS",
+    target: "headers.authorization",
+    expectedValue: '"another value"',
+    enabled: true,
+  }]);
+  assert.equal(assertions.results[0].actual, `"${REDACTED_SECRET_VALUE}"`);
+  assert.equal(JSON.stringify(assertions).includes(secret), false);
+
+  const snapshot = buildSavedRunSnapshot({
+    endpointId: "endpoint-a",
+    endpointName: "Echo credentials",
+    userId: "user-a",
+    method: "GET",
+    url: "https://echo.example/anything",
+  }, result, assertions);
+  const serializedSnapshot = JSON.stringify(
+    snapshot,
+    (_key, value: unknown) => typeof value === "bigint" ? value.toString() : value,
+  );
+  assert.equal(serializedSnapshot.includes(secret), false);
+  assert.equal("responseBody" in snapshot && snapshot.responseBody?.includes(REDACTED_SECRET_VALUE), true);
+});
+
+test("response secret redaction stays bounded for very short values", () => {
+  const body = "a".repeat(1_000_000);
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 1,
+      sizeBytes: body.length,
+      headers: [],
+      body,
+      bodyKind: "text",
+      contentType: "text/plain",
+      finalUrl: "https://echo.example",
+      redirectCount: 0,
+    },
+  }, [{ key: "X-Credential", value: "a", enabled: true, sensitive: true }]);
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.response.body.includes("a"), false);
+  assert.equal(result.response.body.length <= body.length, true);
+});
+
+test("response secret redaction never reuses a pathological secret as its mask", () => {
+  for (const secret of ["*", REDACTED_SECRET_VALUE]) {
+    const result = redactExecutionResultSecrets({
+      ok: true,
+      response: {
+        status: 200,
+        statusText: "OK",
+        durationMs: 1,
+        sizeBytes: secret.length,
+        headers: [],
+        body: secret,
+        bodyKind: "text",
+        contentType: "text/plain",
+        finalUrl: "https://echo.example",
+        redirectCount: 0,
+      },
+    }, [{ key: "X-Credential", value: secret, enabled: true, sensitive: true }]);
+
+    assert.equal(result.ok, true);
+    if (!result.ok) continue;
+    assert.equal(result.response.body.includes(secret), false);
+    assert.equal(result.response.body.length <= REDACTED_SECRET_VALUE.length, true);
+  }
+});
+
+test("response secret redaction cannot reintroduce another sensitive value", () => {
+  const secrets = ["*", "#"];
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 1,
+      sizeBytes: 2,
+      headers: [],
+      body: "*#",
+      bodyKind: "text",
+      contentType: "text/plain",
+      finalUrl: "https://echo.example",
+      redirectCount: 0,
+    },
+  }, secrets.map((value) => ({
+    key: "X-Credential",
+    value,
+    enabled: true,
+    sensitive: true,
+  })));
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(secrets.some((secret) => result.response.body.includes(secret)), false);
+});
+
+test("response secret redaction terminates when adjacent text forms another secret", () => {
+  const left = "[REDA";
+  const right = "CTED]";
+  const secrets = [left + left, right + right];
+  const body = left + left + left + left + right + left;
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 1,
+      sizeBytes: body.length,
+      headers: [],
+      body,
+      bodyKind: "text",
+      contentType: "text/plain",
+      finalUrl: "https://echo.example",
+      redirectCount: 0,
+    },
+  }, secrets.map((value) => ({
+    key: "X-Credential",
+    value,
+    enabled: true,
+    sensitive: true,
+  })));
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(secrets.some((secret) => result.response.body.includes(secret)), false);
+});
+
+test("response secret redaction removes URL-encoded reflected values", () => {
+  const secret = "Bearer phase 7/secret";
+  const encoded = encodeURIComponent(secret);
+  const formEncoded = new URLSearchParams([["value", secret]]).toString().slice(6);
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 1,
+      sizeBytes: encoded.length,
+      headers: [],
+      body: `${encoded} ${formEncoded}`,
+      bodyKind: "text",
+      contentType: "text/plain",
+      finalUrl: `https://echo.example/${encoded}?token=${formEncoded}`,
+      redirectCount: 1,
+    },
+  }, [{ key: "Authorization", value: secret, enabled: true, sensitive: true }]);
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.response.body.includes(encoded), false);
+  assert.equal(result.response.body.includes(formEncoded), false);
+  assert.equal(result.response.finalUrl.includes(encoded), false);
+  assert.equal(result.response.finalUrl.includes(formEncoded), false);
+});
+
+test("response secret redaction handles mixed-case and over-encoded redirect URLs", () => {
+  for (const [secret, encoded] of [["/:", "%2F%3a"], ["abc", "%61%62%63"]]) {
+    const result = redactExecutionResultSecrets({
+      ok: true,
+      response: {
+        status: 200,
+        statusText: "OK",
+        durationMs: 1,
+        sizeBytes: 0,
+        headers: [],
+        body: "",
+        bodyKind: "empty",
+        contentType: null,
+        finalUrl: `https://echo.example/${encoded}`,
+        redirectCount: 1,
+      },
+    }, [{ key: "X-Credential", value: secret, enabled: true, sensitive: true }]);
+
+    assert.equal(result.ok, true);
+    if (!result.ok) continue;
+    assert.equal(result.response.finalUrl.includes(secret), false);
+    assert.equal(result.response.finalUrl.toLowerCase().includes(encoded.toLowerCase()), false);
+  }
+});
+
+test("response secret redaction reuses one bounded matcher for large JSON arrays", () => {
+  const secret = "reflected-value";
+  const values = Array.from({ length: 25_000 }, (_, index) =>
+    index === 24_999 ? secret : "ordinary");
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 1,
+      sizeBytes: 300_000,
+      headers: [],
+      body: JSON.stringify(values),
+      bodyKind: "json",
+      contentType: "application/json",
+      finalUrl: "https://echo.example",
+      redirectCount: 0,
+    },
+  }, [{ key: "X-Credential", value: secret, enabled: true, sensitive: true }]);
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.response.body.includes(secret), false);
+  assert.equal((JSON.parse(result.response.body) as string[]).length, values.length);
+});
+
+test("JSON secret redaction preserves numeric and boolean scalars", () => {
+  const secret = "1";
+  const result = redactExecutionResultSecrets({
+    ok: true,
+    response: {
+      status: 200,
+      statusText: "OK",
+      durationMs: 1,
+      sizeBytes: 64,
+      headers: [],
+      body: JSON.stringify({ id: 1, completed: false, credential: secret, [secret]: "echo" }),
+      bodyKind: "json",
+      contentType: "application/json",
+      finalUrl: "https://echo.example",
+      redirectCount: 0,
+    },
+  }, [{ key: "X-Credential", value: secret, enabled: true, sensitive: true }]);
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const parsed = JSON.parse(result.response.body) as Record<string, unknown>;
+  assert.equal(parsed.id, 1);
+  assert.equal(parsed.completed, false);
+  assert.equal(parsed.credential, "*");
+  assert.equal(Object.prototype.hasOwnProperty.call(parsed, secret), false);
 });
 
 test("unsafe legacy plaintext and foreign stored-header identifiers fail closed", async () => {

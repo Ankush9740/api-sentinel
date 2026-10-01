@@ -6,17 +6,29 @@ import {
   getEndpointForUser,
   listCollectionOptionsForUser,
 } from "@/lib/collections/repository";
+import {
+  getWorkspaceInstanceKey,
+  NEW_REQUEST_QUERY_PARAM,
+} from "@/lib/workspace/new-request";
 
 export default async function WorkspacePage({
   searchParams,
 }: {
-  searchParams: Promise<{ endpoint?: string | string[]; collection?: string | string[] }>;
+  searchParams: Promise<{
+    endpoint?: string | string[];
+    collection?: string | string[];
+    newRequest?: string | string[];
+  }>;
 }) {
   const [params, user] = await Promise.all([searchParams, requireAuthenticatedUser()]);
   const endpointId = Array.isArray(params.endpoint) ? params.endpoint[0] : params.endpoint;
   const preferredCollectionId = Array.isArray(params.collection)
     ? params.collection[0]
     : params.collection;
+  const rawNewRequestKey = params[NEW_REQUEST_QUERY_PARAM];
+  const newRequestKey = Array.isArray(rawNewRequestKey)
+    ? rawNewRequestKey[0]
+    : rawNewRequestKey;
   const [collections, endpoint] = await Promise.all([
     listCollectionOptionsForUser(user.id),
     endpointId ? getEndpointForUser(user.id, endpointId) : Promise.resolve(null),
@@ -42,7 +54,12 @@ export default async function WorkspacePage({
         </p>
       </header>
       <SavedRequestWorkspace
-        key={endpoint ? `${endpoint.id}-${endpoint.updatedAt}` : "new-request"}
+        key={getWorkspaceInstanceKey({
+          endpointId: endpoint?.id,
+          endpointUpdatedAt: endpoint?.updatedAt,
+          requestKey: newRequestKey,
+          collectionId: preferredCollectionId,
+        })}
         collections={collections}
         endpoint={endpoint}
         preferredCollectionId={preferredCollectionId ?? null}

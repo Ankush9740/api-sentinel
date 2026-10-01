@@ -82,7 +82,7 @@ export class ResponseTooLargeError extends Error {
   readonly code = "RESPONSE_TOO_LARGE";
 
   constructor() {
-    super("The target response exceeded the 5 MB execution limit.");
+    super("The target response exceeded the 4 MiB execution limit.");
     this.name = "ResponseTooLargeError";
   }
 }
