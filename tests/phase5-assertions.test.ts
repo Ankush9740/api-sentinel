@@ -36,6 +36,7 @@ test("assertion validation accepts supported rules and rejects invalid combinati
     assertion({ type: "RESPONSE_TIME", operator: "LESS_THAN", expectedValue: "500" }),
     assertion({ type: "HEADER", operator: "CONTAINS", target: "content-type", expectedValue: "json" }),
     assertion({ type: "JSON_PATH", operator: "EQUALS", target: "user.active", expectedValue: "true" }),
+    assertion({ type: "JSON_PATH", operator: "EQUALS", target: "$.items[0].id", expectedValue: "7" }),
   ];
   assert.equal(assertionsInputSchema.safeParse(valid).success, true);
 
@@ -47,6 +48,9 @@ test("assertion validation accepts supported rules and rejects invalid combinati
   ]).success, false);
   assert.equal(assertionsInputSchema.safeParse([
     assertion({ type: "JSON_PATH", operator: "EQUALS", target: "__proto__.polluted", expectedValue: "true" }),
+  ]).success, false);
+  assert.equal(assertionsInputSchema.safeParse([
+    assertion({ type: "JSON_PATH", operator: "EQUALS", target: "$.items[*].id", expectedValue: "7" }),
   ]).success, false);
   assert.equal(assertionsInputSchema.safeParse([
     assertion({ type: "JSON_PATH", operator: "EQUALS", target: "user.id", expectedValue: "not-json" }),
@@ -128,6 +132,55 @@ test("JSON assertions traverse objects and arrays with strict scalar semantics",
   assert.deepEqual([summary.total, summary.passed, summary.failed], [11, 9, 2]);
   assert.equal(summary.results[10].actual, '"42"');
   assert.equal(resolveJsonPath(JSON.parse(response.body), "items.1.id").value, 9);
+  assert.equal(resolveJsonPath(JSON.parse(response.body), "$.items[0].id").value, 7);
+});
+
+test("JSONPlaceholder root paths resolve after parsing the normalized JSON body", () => {
+  const jsonPlaceholderResponse: ExecutionSuccess["response"] = {
+    ...response,
+    sizeBytes: 83,
+    body: JSON.stringify({
+      userId: 1,
+      id: 1,
+      title: "delectus aut autem",
+      completed: false,
+    }),
+  };
+
+  const summary = evaluateAssertions(jsonPlaceholderResponse, [
+    assertion({ type: "STATUS_CODE", operator: "EQUALS", expectedValue: "200" }),
+    assertion({ type: "JSON_PATH", operator: "EQUALS", target: "$.id", expectedValue: "1" }),
+    assertion({ type: "JSON_PATH", operator: "EQUALS", target: "$.completed", expectedValue: "false" }),
+    assertion({ type: "JSON_PATH", operator: "EXISTS", target: "$.missing", expectedValue: null }),
+    assertion({ type: "JSON_PATH", operator: "DOES_NOT_EXIST", target: "$.missing", expectedValue: null }),
+    assertion({ type: "JSON_PATH", operator: "EQUALS", target: "$.id", expectedValue: '"1"' }),
+  ]);
+
+  assert.deepEqual([summary.total, summary.passed, summary.failed], [6, 4, 2]);
+  assert.equal(summary.results[0].passed, true);
+  assert.equal(summary.results[1].passed, true);
+  assert.equal(summary.results[1].actual, "1");
+  assert.equal(summary.results[2].passed, true);
+  assert.equal(summary.results[2].actual, "false");
+  assert.equal(summary.results[3].passed, false);
+  assert.match(summary.results[3].message, /\$\.missing was not found/);
+  assert.equal(summary.results[4].passed, true);
+  assert.equal(summary.results[5].passed, false);
+  assert.match(summary.results[5].message, /received 1/);
+});
+
+test("JSON path parsing supports nested root properties and numeric array indexes safely", () => {
+  const root = {
+    user: { id: 3 },
+    items: [{ id: 7 }],
+  };
+
+  assert.deepEqual(resolveJsonPath(root, "$.user.id"), { found: true, value: 3 });
+  assert.deepEqual(resolveJsonPath(root, "$.items[0].id"), { found: true, value: 7 });
+  assert.deepEqual(resolveJsonPath(root, "items.0.id"), { found: true, value: 7 });
+  assert.deepEqual(resolveJsonPath(root, "body.items[0].id"), { found: true, value: 7 });
+  assert.deepEqual(resolveJsonPath(root, "$.items[1].id"), { found: false, value: undefined });
+  assert.deepEqual(resolveJsonPath(root, "$.__proto__.polluted"), { found: false, value: undefined });
 });
 
 test("non-JSON and malformed JSON responses fail JSON assertions without throwing", () => {

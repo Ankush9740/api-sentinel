@@ -7,6 +7,7 @@ import type {
   AssertionOperatorValue,
   AssertionRunSummary,
 } from "./types";
+import { parseJsonPathSegments } from "./json-path";
 
 type NormalizedResponse = ExecutionSuccess["response"];
 
@@ -201,9 +202,15 @@ function parseResponseJson(response: NormalizedResponse): JsonState {
 }
 
 export function resolveJsonPath(root: unknown, inputPath: string) {
-  const direct = traverse(root, inputPath.split("."));
+  const directSegments = parseJsonPathSegments(inputPath);
+  const direct = directSegments
+    ? traverse(root, directSegments)
+    : { found: false, value: undefined };
   if (direct.found || !inputPath.startsWith("body.")) return direct;
-  return traverse(root, inputPath.slice(5).split("."));
+  const bodySegments = parseJsonPathSegments(inputPath.slice(5));
+  return bodySegments
+    ? traverse(root, bodySegments)
+    : { found: false, value: undefined };
 }
 
 function traverse(root: unknown, segments: string[]) {

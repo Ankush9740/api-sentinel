@@ -11,6 +11,7 @@ import {
   type AssertionTypeValue,
 } from "@/lib/assertions/types";
 import { MAX_ASSERTIONS_PER_REQUEST } from "@/lib/validation/assertions";
+import { parseJsonPathSegments } from "@/lib/assertions/json-path";
 
 export interface EditableAssertion {
   clientId: string;
@@ -226,9 +227,8 @@ function getAssertionDraftError(assertion: EditableAssertion) {
   }
   if (assertion.type === "JSON_PATH") {
     const path = assertion.target.trim().replace(/^body\./, "");
-    const segments = path.split(".");
-    if (!path || segments.length > 32 || segments.some((segment) => !segment || /\s/.test(segment) || ["__proto__", "prototype", "constructor"].includes(segment))) {
-      return "Use a dot path such as data.users.0.id (up to 32 segments).";
+    if (!parseJsonPathSegments(path)) {
+      return "Use a path such as $.data.users[0].id (up to 32 segments).";
     }
   }
   if (assertion.operator === "EXISTS" || assertion.operator === "DOES_NOT_EXIST") return null;

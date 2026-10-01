@@ -8,11 +8,11 @@ import {
   type AssertionTypeValue,
 } from "../assertions/types";
 import { isSensitiveHeaderName } from "../security/sensitive-headers";
+import { parseJsonPathSegments } from "../assertions/json-path";
 
 export const MAX_ASSERTIONS_PER_REQUEST = 50;
 
 const headerNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-const forbiddenPathSegments = new Set(["__proto__", "prototype", "constructor"]);
 
 export const assertionInputSchema = z
   .object({
@@ -105,16 +105,11 @@ function validateAssertion(
     const path = assertion.target.startsWith("body.")
       ? assertion.target.slice(5)
       : assertion.target;
-    const segments = path.split(".");
-    if (
-      !path ||
-      segments.length > 32 ||
-      segments.some((segment) => !segment || /\s/.test(segment) || forbiddenPathSegments.has(segment))
-    ) {
+    if (!parseJsonPathSegments(path)) {
       context.addIssue({
         code: "custom",
         path: ["target"],
-        message: "Use a dot path such as data.users.0.id (up to 32 segments).",
+        message: "Use a path such as $.data.users[0].id (up to 32 segments).",
       });
     }
   }
