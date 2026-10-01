@@ -19,6 +19,8 @@ import { Tabs, type TabItem } from "@/components/ui/tabs";
 import { createEndpointAction, updateEndpointAction } from "@/lib/collections/actions";
 import type { CollectionOption, HttpMethodValue, SavedEndpoint } from "@/lib/collections/types";
 import type { ExecutionApiResult, ExecutionFailure } from "@/lib/request-executor/types";
+import { isSensitiveHeaderName, MASKED_SECRET_VALUE } from "@/lib/security/sensitive-headers";
+import type { HeaderSecretOperation } from "@/lib/security/request-header-secrets";
 import { HTTP_METHODS } from "@/lib/validation/phase2";
 
 const requestTabs: TabItem[] = [
@@ -30,10 +32,14 @@ const requestTabs: TabItem[] = [
 
 interface EditableRow {
   clientId: string;
+  id?: string;
   key: string;
   value: string;
   enabled: boolean;
-  sensitive?: boolean;
+  sensitive: boolean;
+  hasStoredSecret: boolean;
+  secretOperation: HeaderSecretOperation;
+  revealSecret: boolean;
 }
 
 interface SavedRequestWorkspaceProps {
@@ -81,7 +87,7 @@ export function SavedRequestWorkspace({
   const [isPending, startTransition] = useTransition();
 
   const currentSnapshot = useMemo(
-    () => JSON.stringify({ method, url, body, queryParameters: persistableRows(queryParameters), headers: persistableRows(headers), assertions: persistableAssertions(assertions) }),
+    () => JSON.stringify({ method, url, body, queryParameters: persistableQueryRows(queryParameters), headers: persistableHeaderRows(headers), assertions: persistableAssertions(assertions) }),
     [assertions, body, headers, method, queryParameters, url],
   );
   const initialSnapshot = useMemo(
@@ -89,8 +95,8 @@ export function SavedRequestWorkspace({
       method: endpoint?.method ?? "GET",
       url: endpoint?.url ?? "",
       body: endpoint?.body ?? "",
-      queryParameters: persistableRows(initialRows(endpoint?.queryParameters ?? [], "param")),
-      headers: persistableRows(initialRows(endpoint?.headers ?? [], "header")),
+      queryParameters: persistableQueryRows(initialRows(endpoint?.queryParameters ?? [], "param")),
+      headers: persistableHeaderRows(initialRows(endpoint?.headers ?? [], "header")),
       assertions: persistableAssertions(initialAssertions(endpoint?.assertions ?? [])),
     }),
     [endpoint],
@@ -113,8 +119,8 @@ export function SavedRequestWorkspace({
       method,
       url,
       body,
-      queryParameters: persistableRows(queryParameters).map(({ key, value, enabled }) => ({ key, value, enabled })),
-      headers: persistableRows(headers).map(({ key, value, enabled, sensitive }) => ({ key, value, enabled, sensitive: sensitive ?? false })),
+      queryParameters: persistableQueryRows(queryParameters),
+      headers: persistableHeaderRows(headers),
       assertions: persistableAssertions(assertions),
     };
 
@@ -132,9 +138,7 @@ export function SavedRequestWorkspace({
       setEndpointName(draftName.trim());
       setCollectionId(draftCollectionId);
       setSaveDialogOpen(false);
-      setFeedback(result.message);
-      router.replace(`/workspace?endpoint=${encodeURIComponent(result.data.id)}`);
-      router.refresh();
+      window.location.replace(`/workspace?endpoint=${encodeURIComponent(result.data.id)}`);
     });
   }
 
@@ -153,8 +157,8 @@ export function SavedRequestWorkspace({
           method,
           url,
           body,
-          queryParameters: persistableRows(queryParameters).map(({ key, value, enabled }) => ({ key, value, enabled })),
-          headers: persistableRows(headers).map(({ key, value, enabled, sensitive }) => ({ key, value, enabled, sensitive: sensitive ?? false })),
+          queryParameters: persistableQueryRows(queryParameters),
+          headers: persistableHeaderRows(headers),
           assertions: persistableAssertions(assertions),
         }),
       });
@@ -202,7 +206,7 @@ export function SavedRequestWorkspace({
 
         <div id="request-execution-note" className="mt-2.5 inline-flex max-w-full items-center gap-2 rounded-lg border border-warning/25 bg-warning-muted/60 px-2.5 py-1.5 text-xs text-warning-soft">
           <span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
-          Requests run server-side. Private networks and credential-bearing headers remain blocked.
+          Requests run server-side. Saved credentials are decrypted only for the outbound request.
         </div>
         {assertionError && activeTab !== "assertions" ? (
           <button type="button" onClick={() => setActiveTab("assertions")} className="mt-2 block text-left text-xs text-danger-soft underline decoration-danger/40 underline-offset-2">
@@ -214,7 +218,7 @@ export function SavedRequestWorkspace({
           <Tabs
             items={requestTabs.map((tab) => ({
               ...tab,
-              count: tab.id === "params" ? persistableRows(queryParameters).length : tab.id === "headers" ? persistableRows(headers).length : tab.id === "assertions" ? assertions.length : undefined,
+              count: tab.id === "params" ? persistableQueryRows(queryParameters).length : tab.id === "headers" ? persistableHeaderRows(headers).length : tab.id === "assertions" ? assertions.length : undefined,
             }))}
             selectedId={activeTab}
             onSelect={setActiveTab}
@@ -224,10 +228,10 @@ export function SavedRequestWorkspace({
             {activeTab === "params" ? <RequestRows rows={queryParameters} setRows={setQueryParameters} kind="parameter" /> : null}
             {activeTab === "headers" ? (
               <div>
-                <p className="mb-3 rounded-lg border border-warning/20 bg-warning-muted/50 px-3 py-2 text-xs leading-5 text-warning-soft">
-                  Phase 2 saves non-sensitive headers only. Credential-bearing values remain blocked until encrypted storage is implemented.
+                <p className="mb-3 rounded-lg border border-success/20 bg-success-muted/50 px-3 py-2 text-xs leading-5 text-success-soft">
+                  Sensitive values are encrypted before storage. Existing values stay masked; replace or remove them explicitly.
                 </p>
-                <RequestRows rows={headers} setRows={setHeaders} kind="header" />
+                <HeaderRows rows={headers} setRows={setHeaders} />
               </div>
             ) : null}
             {activeTab === "body" ? (
@@ -298,10 +302,10 @@ function RequestRows({ rows, setRows, kind }: { rows: EditableRow[]; setRows: (r
       <div className="space-y-2">
         {rows.map((row, index) => (
           <div key={row.clientId} className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_2rem] gap-2 rounded-lg border border-border bg-surface p-2 sm:grid-cols-[1.75rem_minmax(0,0.9fr)_minmax(0,1.1fr)_2rem]">
-            <label className="flex items-center justify-center self-center"><span className="sr-only">Enable {kind} {index + 1}</span><input type="checkbox" checked={row.enabled} onChange={(event) => updateRow(row.clientId, { enabled: event.target.checked })} className="size-4 accent-accent" /></label>
-            <Input aria-label={`${kind} ${index + 1} key`} value={row.key} onChange={(event) => updateRow(row.clientId, { key: event.target.value })} placeholder={kind === "header" ? "Header name" : "Key"} className="h-9" />
-            <Input aria-label={`${kind} ${index + 1} value`} value={row.value} onChange={(event) => updateRow(row.clientId, { value: event.target.value })} placeholder="Value" className="col-span-2 h-9 font-mono text-xs sm:col-span-1" />
-            <Button variant="ghost" size="icon" onClick={() => setRows(rows.filter((item) => item.clientId !== row.clientId))} aria-label={`Remove ${kind} ${index + 1}`} className="row-start-1 size-8 text-text-subtle hover:text-danger-soft sm:row-start-auto"><CloseIcon className="size-4" /></Button>
+            <label className="col-start-1 row-start-1 flex items-center justify-center self-center"><span className="sr-only">Enable {kind} {index + 1}</span><input type="checkbox" checked={row.enabled} onChange={(event) => updateRow(row.clientId, { enabled: event.target.checked })} className="size-4 accent-accent" /></label>
+            <Input aria-label={`${kind} ${index + 1} key`} value={row.key} onChange={(event) => updateRow(row.clientId, { key: event.target.value })} placeholder={kind === "header" ? "Header name" : "Key"} className="col-start-2 row-start-1 h-9" />
+            <Input aria-label={`${kind} ${index + 1} value`} value={row.value} onChange={(event) => updateRow(row.clientId, { value: event.target.value })} placeholder="Value" className="col-span-3 col-start-1 row-start-2 h-9 font-mono text-xs sm:col-span-1 sm:col-start-3 sm:row-start-1" />
+            <Button variant="ghost" size="icon" onClick={() => setRows(rows.filter((item) => item.clientId !== row.clientId))} aria-label={`Remove ${kind} ${index + 1}`} className="col-start-3 row-start-1 size-8 text-text-subtle hover:text-danger-soft sm:col-start-4"><CloseIcon className="size-4" /></Button>
           </div>
         ))}
       </div>
@@ -310,22 +314,156 @@ function RequestRows({ rows, setRows, kind }: { rows: EditableRow[]; setRows: (r
   );
 }
 
-function initialRows(rows: Array<{ id: string; key: string; value: string; enabled: boolean; sensitive?: boolean }>, prefix: string): EditableRow[] {
-  return rows.map((row, index) => ({ clientId: row.id || `${prefix}-${index}`, key: row.key, value: row.value, enabled: row.enabled, sensitive: row.sensitive }));
+function HeaderRows({ rows, setRows }: { rows: EditableRow[]; setRows: (rows: EditableRow[]) => void }) {
+  function updateRow(clientId: string, patch: Partial<EditableRow>) {
+    setRows(rows.map((row) => (row.clientId === clientId ? { ...row, ...patch } : row)));
+  }
+
+  function updateKey(row: EditableRow, key: string) {
+    const sensitive = row.sensitive || isSensitiveHeaderName(key);
+    updateRow(row.clientId, {
+      key,
+      secretOperation: sensitive && row.secretOperation === "plain"
+        ? "set"
+        : !sensitive && row.secretOperation === "set"
+          ? "plain"
+          : row.secretOperation,
+    });
+  }
+
+  function updateValue(row: EditableRow, value: string) {
+    const sensitive = row.sensitive || isSensitiveHeaderName(row.key);
+    updateRow(row.clientId, {
+      value,
+      secretOperation: sensitive
+        ? value
+          ? "set"
+          : row.hasStoredSecret
+            ? "keep"
+            : "set"
+        : "plain",
+    });
+  }
+
+  function updateSensitive(row: EditableRow, sensitive: boolean) {
+    updateRow(row.clientId, {
+      sensitive,
+      secretOperation: sensitive
+        ? row.value
+          ? "set"
+          : "set"
+        : "plain",
+    });
+  }
+
+  return (
+    <div>
+      <div className="space-y-2">
+        {rows.map((row, index) => {
+          const automaticallySensitive = isSensitiveHeaderName(row.key);
+          const sensitive = row.sensitive || automaticallySensitive;
+          const storedAndKept = row.hasStoredSecret && row.secretOperation === "keep";
+          return (
+            <div key={row.clientId} className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_2rem] gap-2 rounded-lg border border-border bg-surface p-2 sm:grid-cols-[1.75rem_minmax(0,0.9fr)_minmax(0,1.1fr)_2rem]">
+              <label className="col-start-1 row-start-1 flex items-center justify-center self-center">
+                <span className="sr-only">Enable header {index + 1}</span>
+                <input type="checkbox" checked={row.enabled} onChange={(event) => updateRow(row.clientId, { enabled: event.target.checked })} className="size-4 accent-accent" />
+              </label>
+              <Input aria-label={`header ${index + 1} key`} value={row.key} onChange={(event) => updateKey(row, event.target.value)} placeholder="Header name" className="col-start-2 row-start-1 h-9" />
+              <div className="col-span-3 col-start-1 row-start-2 flex min-w-0 items-center gap-1.5 sm:col-span-1 sm:col-start-3 sm:row-start-1">
+                <Input
+                  aria-label={`header ${index + 1} value`}
+                  type={sensitive && !row.revealSecret ? "password" : "text"}
+                  value={row.value}
+                  onChange={(event) => updateValue(row, event.target.value)}
+                  placeholder={storedAndKept ? MASKED_SECRET_VALUE : sensitive ? "Enter sensitive value" : "Value"}
+                  autoComplete="off"
+                  className="h-9 flex-1 font-mono text-xs"
+                />
+                {sensitive && row.value ? (
+                  <button type="button" onClick={() => updateRow(row.clientId, { revealSecret: !row.revealSecret })} className="shrink-0 rounded-md px-2 py-1.5 text-[11px] font-semibold text-text-muted hover:bg-surface-subtle hover:text-text" aria-label={`${row.revealSecret ? "Hide" : "Show"} header ${index + 1} value`}>
+                    {row.revealSecret ? "Hide" : "Show"}
+                  </button>
+                ) : null}
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setRows(rows.filter((item) => item.clientId !== row.clientId))} aria-label={`Remove header ${index + 1}`} className="col-start-3 row-start-1 size-8 text-text-subtle hover:text-danger-soft sm:col-start-4"><CloseIcon className="size-4" /></Button>
+              <div className="col-span-full row-start-3 flex flex-wrap items-center gap-x-3 gap-y-1 pl-9 text-[11px] text-text-subtle sm:row-start-2 sm:pl-0">
+                <label className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={sensitive}
+                    disabled={automaticallySensitive || row.hasStoredSecret}
+                    onChange={(event) => updateSensitive(row, event.target.checked)}
+                    className="size-3.5 accent-accent"
+                  />
+                  Store securely
+                </label>
+                {storedAndKept ? <span role="status">Encrypted value stored</span> : null}
+                {row.secretOperation === "set" && sensitive && row.value ? <span>New value will replace the stored value</span> : null}
+                {automaticallySensitive ? <span>Detected from header name</span> : null}
+                {storedAndKept ? (
+                  <button type="button" onClick={() => updateRow(row.clientId, { value: "", hasStoredSecret: false, secretOperation: "clear", revealSecret: false })} className="font-semibold text-danger-soft underline decoration-danger/35 underline-offset-2">
+                    Remove stored value
+                  </button>
+                ) : null}
+                {row.secretOperation === "clear" ? <span className="text-danger-soft">Stored value will be removed when saved</span> : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Button variant="ghost" size="sm" onClick={() => setRows([...rows, emptyRow("header")])} className="mt-3"><PlusIcon className="size-4" />Add header</Button>
+    </div>
+  );
+}
+
+function initialRows(rows: Array<{ id: string; key: string; value: string; enabled: boolean; sensitive?: boolean; hasStoredSecret?: boolean }>, prefix: string): EditableRow[] {
+  return rows.map((row, index) => ({
+    clientId: row.id || `${prefix}-${index}`,
+    id: row.id || undefined,
+    key: row.key,
+    value: row.value,
+    enabled: row.enabled,
+    sensitive: row.sensitive ?? false,
+    hasStoredSecret: row.hasStoredSecret ?? false,
+    secretOperation: row.hasStoredSecret ? "keep" : "plain",
+    revealSecret: false,
+  }));
 }
 
 function emptyRow(kind: string): EditableRow {
-  return { clientId: `${kind}-${Date.now()}-${Math.random().toString(36).slice(2)}`, key: "", value: "", enabled: true, sensitive: false };
+  return {
+    clientId: `${kind}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    key: "",
+    value: "",
+    enabled: true,
+    sensitive: false,
+    hasStoredSecret: false,
+    secretOperation: "plain",
+    revealSecret: false,
+  };
 }
 
-function persistableRows(rows: EditableRow[]) {
+function persistableQueryRows(rows: EditableRow[]) {
   return rows
     .filter((row) => row.key.trim() || row.value)
     .map((row) => ({
       key: row.key,
       value: row.value,
       enabled: row.enabled,
-      sensitive: row.sensitive,
+    }));
+}
+
+function persistableHeaderRows(rows: EditableRow[]) {
+  return rows
+    .filter((row) => row.key.trim() || row.value || row.secretOperation === "clear")
+    .map((row) => ({
+      id: row.id,
+      key: row.key,
+      value: row.value,
+      enabled: row.enabled,
+      sensitive: row.sensitive || isSensitiveHeaderName(row.key),
+      secretOperation: row.secretOperation,
     }));
 }
 

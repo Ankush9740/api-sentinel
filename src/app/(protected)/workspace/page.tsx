@@ -42,7 +42,7 @@ export default async function WorkspacePage({
         </p>
       </header>
       <SavedRequestWorkspace
-        key={endpoint?.id ?? "new-request"}
+        key={endpoint ? `${endpoint.id}-${endpoint.updatedAt}` : "new-request"}
         collections={collections}
         endpoint={endpoint}
         preferredCollectionId={preferredCollectionId ?? null}

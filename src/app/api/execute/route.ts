@@ -3,6 +3,10 @@ import { NextResponse } from "next/server";
 import { evaluateAssertions } from "@/lib/assertions/evaluator";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import {
+  resolveExecutionHeadersForUser,
+  ResourceNotFoundError,
+} from "@/lib/collections/repository";
+import {
   getHistoryEndpointForUser,
   persistSavedRequestRun,
 } from "@/lib/history/repository";
@@ -11,6 +15,11 @@ import { executeRequest } from "@/lib/request-executor/executor";
 import { MAX_EXECUTION_PAYLOAD_BYTES } from "@/lib/request-executor/limits";
 import { acquireExecutionSlot } from "@/lib/request-executor/rate-limit";
 import type { ExecutionFailure } from "@/lib/request-executor/types";
+import {
+  EncryptionConfigurationError,
+  SecretDecryptionError,
+} from "@/lib/security/encryption";
+import { InvalidHeaderSecretOperationError } from "@/lib/security/request-header-secrets";
 import { executionRequestSchema } from "@/lib/validation/execution";
 
 export const runtime = "nodejs";
@@ -69,7 +78,39 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await executeRequest(parsed.data);
+    let resolvedHeaders;
+    try {
+      resolvedHeaders = await resolveExecutionHeadersForUser(
+        user.id,
+        parsed.data.endpointId,
+        parsed.data.headers,
+      );
+    } catch (error) {
+      if (error instanceof ResourceNotFoundError || error instanceof InvalidHeaderSecretOperationError) {
+        return NextResponse.json(
+          failure("INVALID_REQUEST", "The saved request or stored header is unavailable."),
+          { status: 404 },
+        );
+      }
+      if (error instanceof EncryptionConfigurationError || error instanceof SecretDecryptionError) {
+        return NextResponse.json(
+          failure(
+            "INTERNAL_ERROR",
+            "Stored credentials could not be prepared. Verify the server encryption configuration.",
+          ),
+          { status: 500 },
+        );
+      }
+      throw error;
+    }
+
+    const result = await executeRequest({
+      method: parsed.data.method,
+      url: parsed.data.url,
+      queryParameters: parsed.data.queryParameters,
+      headers: resolvedHeaders,
+      body: parsed.data.body,
+    });
     if (!result.ok) {
       const history = historyEndpoint
         ? await persistHistorySafely(

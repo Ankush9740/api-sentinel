@@ -36,6 +36,7 @@ export interface SavedRequestRow {
 
 export interface SavedRequestHeader extends SavedRequestRow {
   sensitive: boolean;
+  hasStoredSecret: boolean;
 }
 
 export interface SavedAssertion {

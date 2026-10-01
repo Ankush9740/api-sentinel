@@ -12,6 +12,14 @@ import type {
   SavedEndpoint,
 } from "@/lib/collections/types";
 import type { ValidatedEndpointInput } from "@/lib/validation/phase2";
+import { decryptSecret, encryptSecret } from "@/lib/security/encryption";
+import {
+  planHeaderUpdate,
+  prepareHeadersForCreate,
+  resolveHeadersForExecution,
+  toClientHeader,
+} from "@/lib/security/request-header-secrets";
+import type { ValidatedExecutionRequest } from "@/lib/validation/execution";
 
 export class ResourceNotFoundError extends Error {
   constructor() {
@@ -156,13 +164,7 @@ export async function getEndpointForUser(
       value: parameter.value,
       enabled: parameter.enabled,
     })),
-    headers: endpoint.requestHeaders.map((header) => ({
-      id: header.id,
-      key: header.key,
-      value: header.value,
-      enabled: header.enabled,
-      sensitive: header.sensitive,
-    })),
+    headers: endpoint.requestHeaders.map(toClientHeader),
     assertions: endpoint.assertions.map((assertion) => ({
       id: assertion.id,
       type: assertion.type,
@@ -185,6 +187,8 @@ export async function createEndpointForUser(
   });
   if (!collection) throw new ResourceNotFoundError();
 
+  const requestHeaders = await prepareHeadersForCreate(input.headers, encryptSecret);
+
   return prisma.endpoint.create({
     data: {
       collectionId: collection.id,
@@ -196,7 +200,7 @@ export async function createEndpointForUser(
         create: input.queryParameters,
       },
       requestHeaders: {
-        create: input.headers,
+        create: requestHeaders,
       },
       assertions: {
         create: input.assertions.map((assertion, position) => ({
@@ -222,39 +226,110 @@ export async function updateEndpointForUser(
 
   const endpoint = await prisma.endpoint.findFirst({
     where: endpointOwnedByUserWhere(authenticatedUserId, endpointId),
-    select: { id: true },
+    select: {
+      id: true,
+      requestHeaders: {
+        select: {
+          id: true,
+          key: true,
+          value: true,
+          valueKind: true,
+          enabled: true,
+          sensitive: true,
+        },
+      },
+    },
   });
   if (!endpoint) throw new ResourceNotFoundError();
 
-  return prisma.endpoint.update({
-    where: {
-      id: endpoint.id,
-      collection: collectionOwnedByUserWhere(authenticatedUserId),
-    },
-    data: {
-      collectionId: targetCollection.id,
-      name: input.name,
-      method: input.method,
-      url: input.url,
-      body: input.body,
-      queryParameters: {
-        deleteMany: {},
-        create: input.queryParameters,
+  const headerPlan = await planHeaderUpdate(
+    endpoint.requestHeaders,
+    input.headers,
+    encryptSecret,
+  );
+
+  return prisma.$transaction(async (transaction) => {
+    const updated = await transaction.endpoint.update({
+      where: {
+        id: endpoint.id,
+        collection: collectionOwnedByUserWhere(authenticatedUserId),
       },
-      requestHeaders: {
-        deleteMany: {},
-        create: input.headers,
+      data: {
+        collectionId: targetCollection.id,
+        name: input.name,
+        method: input.method,
+        url: input.url,
+        body: input.body,
+        queryParameters: {
+          deleteMany: {},
+          create: input.queryParameters,
+        },
+        assertions: {
+          deleteMany: {},
+          create: input.assertions.map((assertion, position) => ({
+            ...assertion,
+            position,
+          })),
+        },
       },
-      assertions: {
-        deleteMany: {},
-        create: input.assertions.map((assertion, position) => ({
-          ...assertion,
-          position,
+      select: { id: true },
+    });
+
+    const keepIds = headerPlan.keep.map((header) => header.id);
+    await transaction.requestHeader.deleteMany({
+      where: keepIds.length > 0
+        ? { endpointId: endpoint.id, id: { notIn: keepIds } }
+        : { endpointId: endpoint.id },
+    });
+    for (const header of headerPlan.keep) {
+      const result = await transaction.requestHeader.updateMany({
+        where: { id: header.id, endpointId: endpoint.id },
+        data: {
+          key: header.key,
+          enabled: header.enabled,
+          sensitive: header.sensitive,
+        },
+      });
+      if (result.count !== 1) throw new ResourceNotFoundError();
+    }
+    if (headerPlan.create.length > 0) {
+      await transaction.requestHeader.createMany({
+        data: headerPlan.create.map((header) => ({
+          endpointId: endpoint.id,
+          ...header,
         })),
+      });
+    }
+    return updated;
+  });
+}
+
+export async function resolveExecutionHeadersForUser(
+  authenticatedUserId: string,
+  endpointId: string | null,
+  drafts: ValidatedExecutionRequest["headers"],
+) {
+  if (!endpointId) {
+    return resolveHeadersForExecution([], drafts, decryptSecret);
+  }
+
+  const endpoint = await prisma.endpoint.findFirst({
+    where: endpointOwnedByUserWhere(authenticatedUserId, endpointId),
+    select: {
+      requestHeaders: {
+        select: {
+          id: true,
+          key: true,
+          value: true,
+          valueKind: true,
+          enabled: true,
+          sensitive: true,
+        },
       },
     },
-    select: { id: true },
   });
+  if (!endpoint) throw new ResourceNotFoundError();
+  return resolveHeadersForExecution(endpoint.requestHeaders, drafts, decryptSecret);
 }
 
 export async function deleteEndpointForUser(

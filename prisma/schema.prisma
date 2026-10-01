@@ -46,6 +46,11 @@ enum ExecutionStatus {
   INTERNAL_ERROR
 }
 
+enum RequestHeaderValueKind {
+  PLAIN
+  ENCRYPTED
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -134,14 +139,15 @@ model Endpoint {
 }
 
 model RequestHeader {
-  id         String   @id @default(cuid())
+  id         String                 @id @default(cuid())
   endpointId String
   key        String
-  value      String   @db.Text
-  enabled    Boolean  @default(true)
-  sensitive  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  value      String                 @db.Text
+  valueKind  RequestHeaderValueKind @default(PLAIN)
+  enabled    Boolean                @default(true)
+  sensitive  Boolean                @default(false)
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
 
   endpoint Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
 

@@ -24,6 +24,16 @@ In GitHub, open **Settings → Developer settings → OAuth Apps → New OAuth A
 
 Set the returned credentials as `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`. Generate a private `AUTH_SECRET` with `npx auth secret`. Keep all four values and both database URLs only in `.env.local` or another ignored environment source.
 
+## Phase 7 encryption key
+
+Sensitive saved request headers use AES-256-GCM authenticated encryption. Generate a dedicated 32-byte key locally and store only its canonical Base64 form in the ignored `.env.local` file:
+
+```bash
+node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Set the output as `ENCRYPTION_KEY`. Do not reuse `AUTH_SECRET`, expose this key to client code, or commit it. Back up the key securely: losing or rotating it without first re-encrypting stored values makes existing encrypted headers unrecoverable. API Sentinel intentionally fails closed when the key is missing, malformed, wrong, or when ciphertext authentication fails.
+
 ## Quality checks
 
 ```bash

@@ -1,11 +1,8 @@
 import { z } from "zod";
 
 import { MAX_REQUEST_BODY_BYTES } from "../request-executor/limits";
-import { isSensitiveHeaderName } from "../security/sensitive-headers";
 import { assertionsInputSchema } from "./assertions";
-import { HTTP_METHODS } from "./phase2";
-
-const headerNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+import { HTTP_METHODS, requestHeaderInputSchema } from "./phase2";
 
 const executionRowSchema = z
   .object({
@@ -14,33 +11,6 @@ const executionRowSchema = z
     enabled: z.boolean(),
   })
   .strict();
-
-const executionHeaderSchema = z
-  .object({
-    key: z
-      .string()
-      .trim()
-      .min(1, "Header names cannot be empty.")
-      .max(128, "Header names must be 128 characters or fewer.")
-      .regex(headerNamePattern, "Header names must use valid HTTP token characters."),
-    value: z
-      .string()
-      .max(8_192, "Header values must be 8,192 characters or fewer.")
-      .refine((value) => !/[\r\n]/.test(value), "Header values cannot contain line breaks."),
-    enabled: z.boolean(),
-    sensitive: z.boolean().default(false),
-  })
-  .strict()
-  .superRefine((header, context) => {
-    if ((header.sensitive || isSensitiveHeaderName(header.key)) && header.value) {
-      context.addIssue({
-        code: "custom",
-        path: ["value"],
-        message:
-          "Sensitive header values cannot be used until encrypted secret handling is available.",
-      });
-    }
-  });
 
 const executionUrlSchema = z
   .string()
@@ -89,7 +59,7 @@ export const executionRequestSchema = z
     method: z.enum(HTTP_METHODS),
     url: executionUrlSchema,
     queryParameters: z.array(executionRowSchema).max(50),
-    headers: z.array(executionHeaderSchema).max(50),
+    headers: z.array(requestHeaderInputSchema).max(50),
     body: executionBodySchema,
     assertions: assertionsInputSchema.default([]),
   })

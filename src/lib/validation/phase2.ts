@@ -58,6 +58,7 @@ export const queryParameterInputSchema = requestRowBaseSchema
 const headerNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 export const requestHeaderInputSchema = requestRowBaseSchema
   .extend({
+    id: identifierSchema.nullable().optional(),
     key: z
       .string()
       .trim()
@@ -69,15 +70,35 @@ export const requestHeaderInputSchema = requestRowBaseSchema
       .max(8_192, "Header values must be 8,192 characters or fewer.")
       .refine((value) => !/[\r\n]/.test(value), "Header values cannot contain line breaks."),
     sensitive: z.boolean().default(false),
+    secretOperation: z.enum(["plain", "set", "keep", "clear"]).default("plain"),
   })
   .strict()
   .superRefine((header, context) => {
-    if ((header.sensitive || isSensitiveHeaderName(header.key)) && header.value) {
+    const sensitive = header.sensitive || isSensitiveHeaderName(header.key);
+    if (header.secretOperation === "plain" && sensitive) {
       context.addIssue({
         code: "custom",
         path: ["value"],
-        message:
-          "Sensitive header values cannot be saved until encrypted storage is available.",
+        message: "Sensitive headers must use encrypted secret storage.",
+      });
+    }
+    if (header.secretOperation === "set" && (!sensitive || !header.value)) {
+      context.addIssue({
+        code: "custom",
+        path: ["value"],
+        message: sensitive
+          ? "Enter a sensitive header value to encrypt."
+          : "Only sensitive headers can use encrypted secret storage.",
+      });
+    }
+    if (
+      (header.secretOperation === "keep" || header.secretOperation === "clear") &&
+      (!sensitive || !header.id || header.value)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["value"],
+        message: "The stored sensitive value operation is invalid.",
       });
     }
   });
