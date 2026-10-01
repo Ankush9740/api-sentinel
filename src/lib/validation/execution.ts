@@ -85,6 +85,7 @@ const executionBodySchema = z.preprocess(
 
 export const executionRequestSchema = z
   .object({
+    endpointId: z.string().trim().min(1).max(191).nullable().optional().default(null),
     method: z.enum(HTTP_METHODS),
     url: executionUrlSchema,
     queryParameters: z.array(executionRowSchema).max(50),

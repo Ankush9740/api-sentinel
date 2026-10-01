@@ -181,20 +181,26 @@ model Assertion {
 }
 
 model RequestRun {
-  id                  String          @id @default(cuid())
-  endpointId          String?
-  userId              String
-  method              HttpMethod
-  url                 String
-  statusCode          Int?
-  durationMs          Int?
-  responseSizeBytes   BigInt?
-  responseContentType String?
-  responseBody        String?         @db.Text
-  executionStatus     ExecutionStatus
-  errorCode           String?
-  errorMessage        String?         @db.Text
-  createdAt           DateTime        @default(now())
+  id                    String          @id @default(cuid())
+  endpointId            String?
+  userId                String
+  endpointName          String?
+  method                HttpMethod
+  url                   String
+  finalUrl              String?
+  statusCode            Int?
+  statusText            String?
+  durationMs            Int?
+  responseSizeBytes     BigInt?
+  responseContentType   String?
+  responseBodyKind      String?
+  responseBody          String?         @db.Text
+  responseBodyTruncated Boolean         @default(false)
+  redirectCount         Int?
+  executionStatus       ExecutionStatus
+  errorCode             String?
+  errorMessage          String?         @db.Text
+  createdAt             DateTime        @default(now())
 
   endpoint         Endpoint?         @relation(fields: [endpointId], references: [id], onDelete: SetNull)
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -205,19 +211,23 @@ model RequestRun {
 }
 
 model AssertionResult {
-  id           String        @id @default(cuid())
+  id           String             @id @default(cuid())
   requestRunId String
   assertionId  String?
   type         AssertionType
+  operator     AssertionOperator?
+  target       String?
+  label        String?            @db.Text
+  position     Int                @default(0)
   passed       Boolean
-  expected     String?       @db.Text
-  actual       String?       @db.Text
-  message      String?       @db.Text
-  createdAt    DateTime      @default(now())
+  expected     String?            @db.Text
+  actual       String?            @db.Text
+  message      String?            @db.Text
+  createdAt    DateTime           @default(now())
 
   requestRun RequestRun @relation(fields: [requestRunId], references: [id], onDelete: Cascade)
   assertion  Assertion? @relation(fields: [assertionId], references: [id], onDelete: SetNull)
 
-  @@index([requestRunId])
+  @@index([requestRunId, position])
   @@index([assertionId])
 }

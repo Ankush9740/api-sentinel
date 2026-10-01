@@ -61,9 +61,18 @@ export interface ExecutionFailure {
 
 export type ExecutionResult = ExecutionSuccess | ExecutionFailure;
 
+export type HistoryPersistenceStatus =
+  | { persisted: true; runId: string }
+  | { persisted: false; message: string };
+
 export interface ExecutionApiSuccess extends ExecutionSuccess {
   assertions: AssertionRunSummary;
+  history?: HistoryPersistenceStatus;
 }
 
-export type ExecutionApiResult = ExecutionApiSuccess | ExecutionFailure;
+export type ExecutionApiFailure = ExecutionFailure & {
+  history?: HistoryPersistenceStatus;
+};
+
+export type ExecutionApiResult = ExecutionApiSuccess | ExecutionApiFailure;
 

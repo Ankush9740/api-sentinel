@@ -48,6 +48,12 @@ export function ResponseInspector({
         <ResponseStatus result={result} sending={sending} />
       </div>
 
+      {result?.history && !result.history.persisted ? (
+        <p role="status" className="mt-3 rounded-lg border border-warning/25 bg-warning-muted/55 px-3 py-2 text-xs leading-5 text-warning-soft">
+          {result.history.message}
+        </p>
+      ) : null}
+
       <div className="mt-3.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3.5 @min-[60rem]/response:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface-raised">
           <Tabs

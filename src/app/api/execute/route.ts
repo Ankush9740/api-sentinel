@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { evaluateAssertions } from "@/lib/assertions/evaluator";
 import { getAuthenticatedUser } from "@/lib/auth/server";
+import {
+  getHistoryEndpointForUser,
+  persistSavedRequestRun,
+} from "@/lib/history/repository";
+import { persistHistorySafely } from "@/lib/history/persistence-status";
 import { executeRequest } from "@/lib/request-executor/executor";
 import { MAX_EXECUTION_PAYLOAD_BYTES } from "@/lib/request-executor/limits";
 import { acquireExecutionSlot } from "@/lib/request-executor/rate-limit";
@@ -54,12 +59,51 @@ export async function POST(request: Request) {
       );
     }
 
+    const historyEndpoint = parsed.data.endpointId
+      ? await getHistoryEndpointForUser(user.id, parsed.data.endpointId)
+      : null;
+    if (parsed.data.endpointId && !historyEndpoint) {
+      return NextResponse.json(
+        failure("INVALID_REQUEST", "The saved request is unavailable."),
+        { status: 404 },
+      );
+    }
+
     const result = await executeRequest(parsed.data);
-    if (!result.ok) return NextResponse.json(result);
+    if (!result.ok) {
+      const history = historyEndpoint
+        ? await persistHistorySafely(
+            () => persistSavedRequestRun(
+              user.id,
+              historyEndpoint,
+              parsed.data,
+              result,
+              null,
+            ),
+            logHistoryPersistenceFailure,
+          )
+        : undefined;
+      return NextResponse.json({ ...result, history });
+    }
+
+    const assertions = evaluateAssertions(result.response, parsed.data.assertions);
+    const history = historyEndpoint
+      ? await persistHistorySafely(
+          () => persistSavedRequestRun(
+            user.id,
+            historyEndpoint,
+            parsed.data,
+            result,
+            assertions,
+          ),
+          logHistoryPersistenceFailure,
+        )
+      : undefined;
 
     return NextResponse.json({
       ...result,
-      assertions: evaluateAssertions(result.response, parsed.data.assertions),
+      assertions,
+      history,
     });
   } catch (error) {
     if (error instanceof ExecutionPayloadError) {
@@ -122,5 +166,12 @@ async function readBoundedJson(request: Request) {
 
 function failure(code: ExecutionFailure["error"]["code"], message: string): ExecutionFailure {
   return { ok: false, error: { code, message } };
+}
+
+function logHistoryPersistenceFailure(error: unknown) {
+  console.error(
+    "A request run could not be persisted.",
+    error instanceof Error ? error.name : "UnknownError",
+  );
 }
 

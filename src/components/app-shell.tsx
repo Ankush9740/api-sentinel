@@ -35,6 +35,7 @@ interface AppShellProps {
 const navItems = [
   { label: "Workspace", href: "/workspace", icon: BracketsIcon },
   { label: "Collections", href: "/collections", icon: CollectionIcon },
+  { label: "History", href: "/history", icon: HistoryIcon },
 ] as const;
 
 export function AppShell({ children, user }: AppShellProps) {
@@ -278,14 +279,6 @@ function SidebarContent({
             </Link>
           );
         })}
-        <div
-          aria-disabled="true"
-          title="History is currently unavailable"
-          className="flex h-10 cursor-not-allowed items-center gap-2.5 rounded-lg px-3 text-[13px] text-nav-subtle"
-        >
-          <HistoryIcon className="size-4" />
-          <span>History</span>
-        </div>
       </nav>
 
       <div className="mt-auto border-t border-nav-border pt-3">

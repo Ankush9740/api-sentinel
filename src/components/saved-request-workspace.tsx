@@ -149,6 +149,7 @@ export function SavedRequestWorkspace({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          endpointId: endpoint?.id ?? null,
           method,
           url,
           body,
