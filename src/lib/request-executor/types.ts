@@ -1,4 +1,5 @@
 import type { HTTP_METHODS } from "../validation/phase2";
+import type { AssertionRunSummary } from "../assertions/types";
 
 export type ExecutionMethod = (typeof HTTP_METHODS)[number];
 
@@ -59,4 +60,10 @@ export interface ExecutionFailure {
 }
 
 export type ExecutionResult = ExecutionSuccess | ExecutionFailure;
+
+export interface ExecutionApiSuccess extends ExecutionSuccess {
+  assertions: AssertionRunSummary;
+}
+
+export type ExecutionApiResult = ExecutionApiSuccess | ExecutionFailure;
 

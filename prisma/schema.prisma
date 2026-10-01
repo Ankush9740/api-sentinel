@@ -24,8 +24,13 @@ enum AssertionType {
 
 enum AssertionOperator {
   EQUALS
+  NOT_EQUALS
   LESS_THAN
   EXISTS
+  DOES_NOT_EXIST
+  CONTAINS
+  GREATER_THAN
+  BETWEEN
 }
 
 enum ExecutionStatus {
@@ -165,13 +170,14 @@ model Assertion {
   target        String?
   expectedValue String?           @db.Text
   enabled       Boolean           @default(true)
+  position      Int               @default(0)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
   endpoint Endpoint          @relation(fields: [endpointId], references: [id], onDelete: Cascade)
   results  AssertionResult[]
 
-  @@index([endpointId])
+  @@index([endpointId, position])
 }
 
 model RequestRun {

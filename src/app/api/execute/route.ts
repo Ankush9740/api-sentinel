@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { evaluateAssertions } from "@/lib/assertions/evaluator";
 import { getAuthenticatedUser } from "@/lib/auth/server";
 import { executeRequest } from "@/lib/request-executor/executor";
 import { MAX_EXECUTION_PAYLOAD_BYTES } from "@/lib/request-executor/limits";
@@ -54,7 +55,12 @@ export async function POST(request: Request) {
     }
 
     const result = await executeRequest(parsed.data);
-    return NextResponse.json(result);
+    if (!result.ok) return NextResponse.json(result);
+
+    return NextResponse.json({
+      ...result,
+      assertions: evaluateAssertions(result.response, parsed.data.assertions),
+    });
   } catch (error) {
     if (error instanceof ExecutionPayloadError) {
       return NextResponse.json(failure("INVALID_REQUEST", error.message), { status: error.status });

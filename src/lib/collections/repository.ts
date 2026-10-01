@@ -134,6 +134,7 @@ export async function getEndpointForUser(
       collection: { select: { id: true, name: true } },
       queryParameters: { orderBy: { createdAt: "asc" } },
       requestHeaders: { orderBy: { createdAt: "asc" } },
+      assertions: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
     },
   });
 
@@ -162,6 +163,15 @@ export async function getEndpointForUser(
       enabled: header.enabled,
       sensitive: header.sensitive,
     })),
+    assertions: endpoint.assertions.map((assertion) => ({
+      id: assertion.id,
+      type: assertion.type,
+      operator: assertion.operator,
+      target: assertion.target,
+      expectedValue: assertion.expectedValue,
+      enabled: assertion.enabled,
+      position: assertion.position,
+    })),
   };
 }
 
@@ -187,6 +197,12 @@ export async function createEndpointForUser(
       },
       requestHeaders: {
         create: input.headers,
+      },
+      assertions: {
+        create: input.assertions.map((assertion, position) => ({
+          ...assertion,
+          position,
+        })),
       },
     },
     select: { id: true },
@@ -228,6 +244,13 @@ export async function updateEndpointForUser(
       requestHeaders: {
         deleteMany: {},
         create: input.headers,
+      },
+      assertions: {
+        deleteMany: {},
+        create: input.assertions.map((assertion, position) => ({
+          ...assertion,
+          position,
+        })),
       },
     },
     select: { id: true },

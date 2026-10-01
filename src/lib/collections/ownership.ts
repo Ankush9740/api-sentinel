@@ -23,3 +23,12 @@ export function endpointOwnedByUserWhere(
     ? { id: endpointId, collection: { userId } }
     : { collection: { userId } };
 }
+
+export function assertionOwnedByUserWhere(
+  authenticatedUserId: string,
+  assertionId?: string,
+) {
+  const userId = requireOwnerId(authenticatedUserId);
+  const owner = { endpoint: { collection: { userId } } };
+  return assertionId ? { id: assertionId, ...owner } : owner;
+}

@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import { isSensitiveHeaderName } from "../security/sensitive-headers";
+import { assertionsInputSchema } from "./assertions";
+
+export { isSensitiveHeaderName } from "../security/sensitive-headers";
+
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 const identifierSchema = z.string().trim().min(1).max(191);
@@ -51,9 +56,6 @@ export const queryParameterInputSchema = requestRowBaseSchema
   .strict();
 
 const headerNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-const sensitiveHeaderNamePattern =
-  /^(authorization|proxy-authorization|cookie|set-cookie|x-api-key|api-key|x-auth-token)$/i;
-
 export const requestHeaderInputSchema = requestRowBaseSchema
   .extend({
     key: z
@@ -70,7 +72,7 @@ export const requestHeaderInputSchema = requestRowBaseSchema
   })
   .strict()
   .superRefine((header, context) => {
-    if ((header.sensitive || sensitiveHeaderNamePattern.test(header.key)) && header.value) {
+    if ((header.sensitive || isSensitiveHeaderName(header.key)) && header.value) {
       context.addIssue({
         code: "custom",
         path: ["value"],
@@ -129,6 +131,7 @@ export const endpointInputSchema = z
     headers: z
       .array(requestHeaderInputSchema)
       .max(50, "An endpoint can contain at most 50 headers."),
+    assertions: assertionsInputSchema.default([]),
   })
   .strict();
 
@@ -143,7 +146,3 @@ export const endpointIdSchema = z
 export type CollectionInput = z.input<typeof collectionInputSchema>;
 export type EndpointInput = z.input<typeof endpointInputSchema>;
 export type ValidatedEndpointInput = z.output<typeof endpointInputSchema>;
-
-export function isSensitiveHeaderName(name: string) {
-  return sensitiveHeaderNamePattern.test(name.trim());
-}

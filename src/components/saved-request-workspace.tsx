@@ -4,17 +4,21 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
 import { ArrowRightIcon, CloseIcon, PlusIcon } from "@/components/icons";
+import {
+  AssertionBuilder,
+  getAssertionsDraftError,
+  type EditableAssertion,
+} from "@/components/request/assertion-builder";
 import { ResponseInspector } from "@/components/response/response-inspector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { FeedbackState } from "@/components/ui/feedback-state";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Tabs, type TabItem } from "@/components/ui/tabs";
 import { createEndpointAction, updateEndpointAction } from "@/lib/collections/actions";
 import type { CollectionOption, HttpMethodValue, SavedEndpoint } from "@/lib/collections/types";
-import type { ExecutionFailure, ExecutionResult } from "@/lib/request-executor/types";
+import type { ExecutionApiResult, ExecutionFailure } from "@/lib/request-executor/types";
 import { HTTP_METHODS } from "@/lib/validation/phase2";
 
 const requestTabs: TabItem[] = [
@@ -58,6 +62,9 @@ export function SavedRequestWorkspace({
   const [body, setBody] = useState(endpoint?.body ?? "");
   const [queryParameters, setQueryParameters] = useState<EditableRow[]>(() => initialRows(endpoint?.queryParameters ?? [], "param"));
   const [headers, setHeaders] = useState<EditableRow[]>(() => initialRows(endpoint?.headers ?? [], "header"));
+  const [assertions, setAssertions] = useState<EditableAssertion[]>(() =>
+    initialAssertions(endpoint?.assertions ?? []),
+  );
   const [endpointName, setEndpointName] = useState(endpoint?.name ?? "Untitled request");
   const initialCollectionId = endpoint?.collectionId ??
     (preferredCollectionId && collections.some((item) => item.id === preferredCollectionId)
@@ -69,13 +76,13 @@ export function SavedRequestWorkspace({
   const [draftCollectionId, setDraftCollectionId] = useState(initialCollectionId);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [responseTab, setResponseTab] = useState("body");
-  const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
+  const [executionResult, setExecutionResult] = useState<ExecutionApiResult | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const currentSnapshot = useMemo(
-    () => JSON.stringify({ method, url, body, queryParameters: persistableRows(queryParameters), headers: persistableRows(headers) }),
-    [body, headers, method, queryParameters, url],
+    () => JSON.stringify({ method, url, body, queryParameters: persistableRows(queryParameters), headers: persistableRows(headers), assertions: persistableAssertions(assertions) }),
+    [assertions, body, headers, method, queryParameters, url],
   );
   const initialSnapshot = useMemo(
     () => JSON.stringify({
@@ -84,11 +91,13 @@ export function SavedRequestWorkspace({
       body: endpoint?.body ?? "",
       queryParameters: persistableRows(initialRows(endpoint?.queryParameters ?? [], "param")),
       headers: persistableRows(initialRows(endpoint?.headers ?? [], "header")),
+      assertions: persistableAssertions(initialAssertions(endpoint?.assertions ?? [])),
     }),
     [endpoint],
   );
   const dirty = !endpoint || currentSnapshot !== initialSnapshot;
   const bodyError = getJsonError(body);
+  const assertionError = getAssertionsDraftError(assertions);
 
   function openSaveDialog() {
     setDraftName(endpoint ? endpointName : draftName);
@@ -106,6 +115,7 @@ export function SavedRequestWorkspace({
       body,
       queryParameters: persistableRows(queryParameters).map(({ key, value, enabled }) => ({ key, value, enabled })),
       headers: persistableRows(headers).map(({ key, value, enabled, sensitive }) => ({ key, value, enabled, sensitive: sensitive ?? false })),
+      assertions: persistableAssertions(assertions),
     };
 
     setFeedback(null);
@@ -129,7 +139,7 @@ export function SavedRequestWorkspace({
   }
 
   async function sendRequest() {
-    if (isExecuting || bodyError) return;
+    if (isExecuting || bodyError || assertionError) return;
     setIsExecuting(true);
     setExecutionResult(null);
     setResponseTab("body");
@@ -144,10 +154,12 @@ export function SavedRequestWorkspace({
           body,
           queryParameters: persistableRows(queryParameters).map(({ key, value, enabled }) => ({ key, value, enabled })),
           headers: persistableRows(headers).map(({ key, value, enabled, sensitive }) => ({ key, value, enabled, sensitive: sensitive ?? false })),
+          assertions: persistableAssertions(assertions),
         }),
       });
-      const result = await response.json() as ExecutionResult;
+      const result = await response.json() as ExecutionApiResult;
       setExecutionResult(result);
+      if (result.ok && result.assertions.total > 0) setResponseTab("tests");
     } catch {
       setExecutionResult(clientExecutionFailure(
         "API Sentinel could not reach its execution service. Try again.",
@@ -182,7 +194,7 @@ export function SavedRequestWorkspace({
             {HTTP_METHODS.map((item) => <option key={item}>{item}</option>)}
           </Select>
           <Input aria-label="Request URL" placeholder="https://api.example.com/users" value={url} onChange={(event) => setUrl(event.target.value)} className="h-11 min-w-0 rounded-none border-0 bg-surface px-4 font-mono text-[13px] shadow-none" />
-          <Button onClick={sendRequest} loading={isExecuting} disabled={Boolean(bodyError)} className="h-11 min-w-0 rounded-none border-0 border-t border-nav-border bg-sidebar text-nav-text disabled:bg-sidebar disabled:text-nav-text disabled:opacity-70 @min-[24rem]/request:col-span-2 @min-[42rem]/request:col-span-1 @min-[42rem]/request:border-l @min-[42rem]/request:border-t-0">
+          <Button onClick={sendRequest} loading={isExecuting} disabled={Boolean(bodyError || assertionError)} className="h-11 min-w-0 rounded-none border-0 border-t border-nav-border bg-sidebar text-nav-text disabled:bg-sidebar disabled:text-nav-text disabled:opacity-70 @min-[24rem]/request:col-span-2 @min-[42rem]/request:col-span-1 @min-[42rem]/request:border-l @min-[42rem]/request:border-t-0">
             {isExecuting ? "Sending…" : "Send"} {!isExecuting ? <ArrowRightIcon className="size-4" /> : null}
           </Button>
         </div>
@@ -191,12 +203,17 @@ export function SavedRequestWorkspace({
           <span className="size-1.5 shrink-0 rounded-full bg-warning" aria-hidden="true" />
           Requests run server-side. Private networks and credential-bearing headers remain blocked.
         </div>
+        {assertionError && activeTab !== "assertions" ? (
+          <button type="button" onClick={() => setActiveTab("assertions")} className="mt-2 block text-left text-xs text-danger-soft underline decoration-danger/40 underline-offset-2">
+            {assertionError} Review assertions.
+          </button>
+        ) : null}
 
         <div className="mt-5">
           <Tabs
             items={requestTabs.map((tab) => ({
               ...tab,
-              count: tab.id === "params" ? persistableRows(queryParameters).length : tab.id === "headers" ? persistableRows(headers).length : undefined,
+              count: tab.id === "params" ? persistableRows(queryParameters).length : tab.id === "headers" ? persistableRows(headers).length : tab.id === "assertions" ? assertions.length : undefined,
             }))}
             selectedId={activeTab}
             onSelect={setActiveTab}
@@ -233,7 +250,7 @@ export function SavedRequestWorkspace({
               </div>
             ) : null}
             {activeTab === "assertions" ? (
-              <FeedbackState className="min-h-24 py-5" title="Assertions arrive in Phase 5" description="Saved endpoint assertions are intentionally outside the Phase 2 scope." />
+              <AssertionBuilder assertions={assertions} setAssertions={setAssertions} />
             ) : null}
           </div>
         </div>
@@ -253,7 +270,7 @@ export function SavedRequestWorkspace({
         title={endpoint ? "Save request changes" : "Save request"}
         description="Choose a clear name and the collection where this request belongs."
         footer={collections.length > 0 ? (
-          <><Button variant="ghost" onClick={() => setSaveDialogOpen(false)} disabled={isPending}>Cancel</Button><Button onClick={saveRequest} loading={isPending} disabled={Boolean(bodyError)}>Save request</Button></>
+          <><Button variant="ghost" onClick={() => setSaveDialogOpen(false)} disabled={isPending}>Cancel</Button><Button onClick={saveRequest} loading={isPending} disabled={Boolean(bodyError || assertionError)}>Save request</Button></>
         ) : <Button onClick={() => router.push("/collections")}>Create a collection</Button>}
       >
         {collections.length === 0 ? (
@@ -309,6 +326,36 @@ function persistableRows(rows: EditableRow[]) {
       enabled: row.enabled,
       sensitive: row.sensitive,
     }));
+}
+
+function initialAssertions(
+  assertions: Array<{
+    id: string;
+    type: EditableAssertion["type"];
+    operator: EditableAssertion["operator"];
+    target: string | null;
+    expectedValue: string | null;
+    enabled: boolean;
+  }>,
+): EditableAssertion[] {
+  return assertions.map((assertion) => ({
+    clientId: assertion.id,
+    type: assertion.type,
+    operator: assertion.operator,
+    target: assertion.target ?? "",
+    expectedValue: assertion.expectedValue ?? "",
+    enabled: assertion.enabled,
+  }));
+}
+
+function persistableAssertions(assertions: EditableAssertion[]) {
+  return assertions.map((assertion) => ({
+    type: assertion.type,
+    operator: assertion.operator,
+    target: assertion.target.trim() || null,
+    expectedValue: assertion.expectedValue.trim() || null,
+    enabled: assertion.enabled,
+  }));
 }
 
 function getJsonError(body: string) {

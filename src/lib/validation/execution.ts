@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 import { MAX_REQUEST_BODY_BYTES } from "../request-executor/limits";
-import { HTTP_METHODS, isSensitiveHeaderName } from "./phase2";
+import { isSensitiveHeaderName } from "../security/sensitive-headers";
+import { assertionsInputSchema } from "./assertions";
+import { HTTP_METHODS } from "./phase2";
 
 const headerNamePattern = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
@@ -88,6 +90,7 @@ export const executionRequestSchema = z
     queryParameters: z.array(executionRowSchema).max(50),
     headers: z.array(executionHeaderSchema).max(50),
     body: executionBodySchema,
+    assertions: assertionsInputSchema.default([]),
   })
   .strict();
 

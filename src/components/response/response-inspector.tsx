@@ -2,12 +2,12 @@
 
 import { useMemo, useRef, useState } from "react";
 
-import { BracketsIcon, CheckIcon, CopyIcon } from "@/components/icons";
+import { BracketsIcon, CheckIcon, CloseIcon, CopyIcon } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FeedbackState } from "@/components/ui/feedback-state";
 import { Tabs, type TabItem } from "@/components/ui/tabs";
-import type { ExecutionResult } from "@/lib/request-executor/types";
+import type { ExecutionApiResult } from "@/lib/request-executor/types";
 import {
   executionErrorPresentation,
   formatBytes,
@@ -22,7 +22,7 @@ const responseTabs: TabItem[] = [
 ];
 
 interface ResponseInspectorProps {
-  result: ExecutionResult | null;
+  result: ExecutionApiResult | null;
   sending: boolean;
   selectedTab: string;
   onSelectTab: (tab: string) => void;
@@ -51,7 +51,10 @@ export function ResponseInspector({
       <div className="mt-3.5 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3.5 @min-[60rem]/response:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface-raised">
           <Tabs
-            items={responseTabs}
+            items={responseTabs.map((tab) => ({
+              ...tab,
+              count: tab.id === "tests" && result?.ok ? result.assertions.total : undefined,
+            }))}
             selectedId={selectedTab}
             onSelect={onSelectTab}
             label="Response views"
@@ -72,7 +75,7 @@ export function ResponseInspector({
   );
 }
 
-function ResponseStatus({ result, sending }: { result: ExecutionResult | null; sending: boolean }) {
+function ResponseStatus({ result, sending }: { result: ExecutionApiResult | null; sending: boolean }) {
   if (sending) {
     return (
       <span role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-text-subtle">
@@ -116,7 +119,7 @@ function ResponseContent({
   selectedTab,
   onRetry,
 }: {
-  result: ExecutionResult | null;
+  result: ExecutionApiResult | null;
   sending: boolean;
   selectedTab: string;
   onRetry: () => void;
@@ -149,6 +152,15 @@ function ResponseContent({
   }
   if (!result.ok) {
     const presentation = executionErrorPresentation(result.error.code);
+    if (selectedTab === "tests") {
+      return (
+        <FeedbackState
+          className="min-h-48"
+          title="Tests were not run"
+          description={`No assertions ran because ${presentation.title.toLowerCase()}. Correct the request and retry.`}
+        />
+      );
+    }
     return (
       <div role="alert" className="flex min-h-52 flex-col items-center justify-center px-6 py-9 text-center">
         <div className="mb-4 flex size-10 items-center justify-center rounded-xl border border-danger/30 bg-danger-muted text-danger-soft">
@@ -164,7 +176,10 @@ function ResponseContent({
     );
   }
   if (selectedTab === "tests") {
-    return <FeedbackState className="min-h-48" title="Tests arrive in Phase 5" description="This tab will show assertion results after the assertion engine is implemented." />;
+    if (result.assertions.total === 0) {
+      return <FeedbackState className="min-h-48" title="No assertions configured" description="Add a response assertion above, then send the request to evaluate it on the server." />;
+    }
+    return <TestResults summary={result.assertions} />;
   }
   if (selectedTab === "headers") {
     if (!result.response.headers.length) {
@@ -269,7 +284,7 @@ function CopyButton({
   );
 }
 
-function ExecutionSummary({ result, sending }: { result: ExecutionResult | null; sending: boolean }) {
+function ExecutionSummary({ result, sending }: { result: ExecutionApiResult | null; sending: boolean }) {
   const rows: Array<[string, string]> = result?.ok
     ? [
         ["Status", `${result.response.status} ${result.response.statusText}`.trim()],
@@ -314,6 +329,43 @@ function ExecutionSummary({ result, sending }: { result: ExecutionResult | null;
         ))}
       </dl>
     </aside>
+  );
+}
+
+function TestResults({ summary }: { summary: NonNullable<Extract<ExecutionApiResult, { ok: true }>["assertions"]> }) {
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-subtle/45 px-4 py-2.5 sm:px-5">
+        <p className="text-xs font-semibold text-text-secondary">
+          {summary.passed}/{summary.total} passed
+        </p>
+        <span className={`rounded-full px-2 py-1 font-mono text-[10px] ${summary.failed ? "bg-danger-muted text-danger-soft" : "bg-success-muted text-success-soft"}`}>
+          {summary.failed ? `${summary.failed} failed` : "All passed"}
+        </span>
+      </div>
+      <ol className="max-h-[36rem] min-w-0 divide-y divide-border overflow-y-auto">
+        {summary.results.map((test) => (
+          <li key={`${test.index}-${test.label}`} className="grid min-w-0 grid-cols-[1.75rem_minmax(0,1fr)] gap-2.5 px-4 py-3.5 sm:px-5">
+            <span
+              aria-label={test.passed ? "Passed" : "Failed"}
+              className={`mt-0.5 flex size-6 items-center justify-center rounded-full border ${test.passed ? "border-success/30 bg-success-muted text-success-soft" : "border-danger/30 bg-danger-muted text-danger-soft"}`}
+            >
+              {test.passed ? <CheckIcon className="size-3.5" /> : <CloseIcon className="size-3.5" />}
+            </span>
+            <div className="min-w-0">
+              <p className="break-words text-[13px] font-medium text-text-secondary [overflow-wrap:anywhere]">{test.label}</p>
+              <p className={`mt-1 text-xs leading-5 ${test.passed ? "text-text-subtle" : "text-danger-soft"}`}>{test.message}</p>
+              {!test.passed && (test.expected !== null || test.actual !== null) ? (
+                <dl className="mt-2 grid min-w-0 gap-1 rounded-lg border border-border bg-surface-subtle/55 px-3 py-2 font-mono text-[11px] @min-[34rem]/response:grid-cols-2">
+                  <div className="min-w-0"><dt className="text-text-subtle">Expected</dt><dd className="break-words text-text-secondary [overflow-wrap:anywhere]">{test.expected ?? "—"}</dd></div>
+                  <div className="min-w-0"><dt className="text-text-subtle">Received</dt><dd className="break-words text-text-secondary [overflow-wrap:anywhere]">{test.actual ?? "—"}</dd></div>
+                </dl>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

@@ -1,4 +1,8 @@
 import type { HTTP_METHODS } from "@/lib/validation/phase2";
+import type {
+  AssertionOperatorValue,
+  AssertionTypeValue,
+} from "@/lib/assertions/types";
 
 export type HttpMethodValue = (typeof HTTP_METHODS)[number];
 
@@ -34,6 +38,16 @@ export interface SavedRequestHeader extends SavedRequestRow {
   sensitive: boolean;
 }
 
+export interface SavedAssertion {
+  id: string;
+  type: AssertionTypeValue;
+  operator: AssertionOperatorValue;
+  target: string | null;
+  expectedValue: string | null;
+  enabled: boolean;
+  position: number;
+}
+
 export interface SavedEndpoint {
   id: string;
   collectionId: string;
@@ -46,6 +60,7 @@ export interface SavedEndpoint {
   updatedAt: string;
   queryParameters: SavedRequestRow[];
   headers: SavedRequestHeader[];
+  assertions: SavedAssertion[];
 }
 
 export interface CollectionOption {
