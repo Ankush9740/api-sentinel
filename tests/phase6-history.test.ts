@@ -14,6 +14,7 @@ import {
   encodeHistoryCursor,
   historyCursorWhere,
 } from "../src/lib/history/pagination";
+import { formatLocalTimestamp } from "../src/lib/history/timestamp";
 import { persistHistorySafely } from "../src/lib/history/persistence-status";
 import {
   boundedResponseBody,
@@ -144,6 +145,22 @@ test("cursor pagination is opaque, stable, and safely rejects malformed input", 
   });
   assert.equal(decodeHistoryCursor("malformed"), null);
   assert.equal(decodeHistoryCursor("x".repeat(513)), null);
+});
+
+test("history timestamps format in the runtime-selected timezone without a timezone suffix", () => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata",
+  });
+  const formatted = formatLocalTimestamp("2026-10-02T06:16:00.000Z", formatter);
+
+  assert.match(formatted, /Oct 2, 2026/);
+  assert.match(formatted, /11:46/);
+  assert.doesNotMatch(formatted, /UTC|GMT|IST/);
 });
 
 test("history uses centralized conservative page and retention bounds", () => {

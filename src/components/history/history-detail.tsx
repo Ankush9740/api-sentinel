@@ -2,10 +2,11 @@ import Link from "next/link";
 
 import { ArrowLeftIcon, CheckIcon, CloseIcon } from "@/components/icons";
 import { MethodBadge } from "@/components/collections/method-badge";
+import { LocalTimestamp } from "@/components/history/local-timestamp";
 import { Badge } from "@/components/ui/badge";
 import type { HistoryDetail as HistoryDetailData } from "@/lib/history/types";
 import { prepareResponseBody, statusTone } from "@/lib/response-inspector/presentation";
-import { failureLabel, formattedSize, formatTimestamp } from "./history-list";
+import { failureLabel, formattedSize } from "./history-list";
 
 export function HistoryDetail({ run }: { run: HistoryDetailData }) {
   const preparedBody = run.responseBody !== null && run.responseBodyKind
@@ -21,7 +22,7 @@ export function HistoryDetail({ run }: { run: HistoryDetailData }) {
       <header className="mt-5 min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Badge tone="accent" className="uppercase tracking-[0.08em]">Past execution</Badge>
-          <time dateTime={run.createdAt} className="text-xs text-text-subtle">{formatTimestamp(run.createdAt)}</time>
+          <time dateTime={run.createdAt} className="text-xs text-text-subtle"><LocalTimestamp value={run.createdAt} /></time>
         </div>
         <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
           <MethodBadge method={run.method} />

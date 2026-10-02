@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { ChevronRightIcon, HistoryIcon } from "@/components/icons";
 import { MethodBadge } from "@/components/collections/method-badge";
+import { LocalTimestamp } from "@/components/history/local-timestamp";
 import { Badge } from "@/components/ui/badge";
 import { FeedbackState } from "@/components/ui/feedback-state";
 import type { HistoryPageData, HistoryListItem } from "@/lib/history/types";
@@ -95,7 +96,7 @@ function HistoryRow({ run }: { run: HistoryListItem }) {
         />
         <time dateTime={run.createdAt} className="text-xs leading-5 text-text-muted">
           <span className="mr-2 font-semibold text-text-subtle lg:sr-only">Executed</span>
-          {formatTimestamp(run.createdAt)}
+          <LocalTimestamp value={run.createdAt} />
         </time>
         <ChevronRightIcon className="hidden size-4 text-text-subtle transition-transform group-hover:translate-x-0.5 lg:block" />
       </Link>
@@ -132,18 +133,6 @@ export function failureLabel(status: HistoryListItem["executionStatus"]) {
     BLOCKED_TARGET: "Blocked",
     INTERNAL_ERROR: "Failed",
   }[status];
-}
-
-export function formatTimestamp(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-    timeZoneName: "short",
-  }).format(new Date(value));
 }
 
 export function formattedSize(value: number | null) {
